@@ -7,3 +7,4 @@ edition = "2021"
 
 [dependencies]
 fuser = "0.7"
+nix = "0.26.2"
