@@ -13,7 +13,8 @@ let
 in
 rustPlatform.buildRustPackage
   {
-    name = "buildxzy";
+    pname = "buildxyz";
+    version = "0.0.1";
     src = runCommand "src" { } ''
       install -D ${./Cargo.toml} $out/Cargo.toml
       install -D ${./Cargo.lock} $out/Cargo.lock

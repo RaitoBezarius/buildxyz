@@ -4,6 +4,12 @@ Build your Nix package automatically
 
 # Usage
 
+Run the project:
+
+``` nix
+nix run github:RaitoBezarius/buildxyz
+```
+
 Build the project:
 
 ``` nix
