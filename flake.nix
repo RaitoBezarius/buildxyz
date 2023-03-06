@@ -11,12 +11,8 @@
     flake-parts.lib.mkFlake { inherit inputs; } ({ lib, ... }: {
       systems = lib.systems.flakeExposed;
       perSystem = { pkgs, ... }: {
-        packages.default = pkgs.rustPlatform.buildRustPackage {
-          name = "buildxzy";
-          src = self;
-          cargoLock = {
-            lockFile = ./Cargo.lock;
-          };
+        packages.default = pkgs.callPackage ./default.nix {
+          inherit self;
         };
       };
     });
