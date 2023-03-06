@@ -36,4 +36,8 @@ rustPlatform.buildRustPackage
       false
     fi
   '';
+
+  installPhase = ''
+    touch $out
+  '';
 }
