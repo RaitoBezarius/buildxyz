@@ -7,7 +7,7 @@ Build your Nix package automatically
 Build the project:
 
 ``` nix
-$ nix build
+nix build
 ```
 
 Run all tests:
