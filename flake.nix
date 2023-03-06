@@ -22,6 +22,7 @@
       ];
       imports = [
         ./treefmt/flake-module.nix
+        ./tests/flake-module.nix
       ];
 
       perSystem = { self', pkgs, ... }: {
