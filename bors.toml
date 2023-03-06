@@ -1,0 +1,11 @@
+cut_body_after = "" # don't include text from the PR body in the merge commit message
+status = [
+  "Evaluate flake.nix",
+  "check clippy [x86_64-linux]",
+  "check nixos-test [x86_64-linux]",
+  "check treefmt [x86_64-linux]",
+  "package buildxyz [aarch64-darwin]",
+  "package buildxyz [x86_64-linux]",
+  "package default [aarch64-darwin]",
+  "package default [x86_64-linux]"
+]
