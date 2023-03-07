@@ -1,7 +1,9 @@
 use fuser::{spawn_mount2, Filesystem};
 use log::info;
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::process::Command;
 use clap::Parser;
 
 // 2 directories:
@@ -28,6 +30,7 @@ struct Args {
 fn main() {
     let args = Args::parse();
 
+    // TODO: .expect should be replaced to catch errors and unmount filesystem no matter what.
     let running = Arc::new(AtomicBool::new(true));
     stderrlog::new()
         //.module(module_path!())
@@ -41,6 +44,7 @@ fn main() {
 
     info!("Mounting the FUSE filesystem in the background...");
 
+    // TODO: use tempdir for multiple instances
     let session = spawn_mount2(
         BuildXYZ {},
         "/tmp/buildxyz",
@@ -48,6 +52,17 @@ fn main() {
     ).expect("Error spawning the FUSE filesystem in the background");
 
     info!("Running `{}`", args.cmd);
+
+    // 1. Setup the environment variables
+    // PATH_XXX="build env:negative lookup folder (FUSE)"
+
+    let instrumented_env: HashMap<String, String> = HashMap::new();
+    Command::new(args.cmd)
+        .env_clear()
+        .envs(&instrumented_env)
+        .spawn()
+        .expect("Command failed to start");
+
     while running.load(Ordering::SeqCst) {}
 
     info!("Unmounting the filesystem...");
