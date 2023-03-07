@@ -3,6 +3,7 @@
 , stdenv
 , pkg-config
 , openssl
+, zstd
 , rustPlatform
 , lib
 , runCommand
@@ -21,13 +22,13 @@ rustPlatform.buildRustPackage
       install -D ${./Cargo.lock} $out/Cargo.lock
       cp -r ${./src} $out/src
     '';
-    buildInputs = [ fuse openssl ];
+    buildInputs = [ fuse openssl zstd ];
     nativeBuildInputs = [ pkg-config ] ++ lib.optional enableLint clippy;
     cargoLock = {
       lockFile = ./Cargo.lock;
-      outputHashes = {
-        "nix-index-0.1.5" = "sha256-/btQP7I4zpIA0MWEQJVYnR1XhyudPnYD5Qx4vrW+Uq8=";
-      };
+     # outputHashes = {
+     #   "nix-index-0.1.5" = "sha256-/btQP7I4zpIA0MWEQJVYnR1XhyudPnYD5Qx4vrW+Uq8=";
+     # };
     };
     meta = with lib; {
       description = "Provides build shell that can automatically figure out dependencies";
