@@ -2,6 +2,7 @@
 , macfuse-stubs
 , stdenv
 , pkg-config
+, openssl
 , rustPlatform
 , lib
 , runCommand
@@ -20,9 +21,14 @@ rustPlatform.buildRustPackage
       install -D ${./Cargo.lock} $out/Cargo.lock
       cp -r ${./src} $out/src
     '';
-    buildInputs = [ fuse ];
+    buildInputs = [ fuse openssl ];
     nativeBuildInputs = [ pkg-config ] ++ lib.optional enableLint clippy;
-    cargoLock.lockFile = ./Cargo.lock;
+    cargoLock = {
+      lockFile = ./Cargo.lock;
+      outputHashes = {
+        "nix-index-0.1.5" = "sha256-/btQP7I4zpIA0MWEQJVYnR1XhyudPnYD5Qx4vrW+Uq8=";
+      };
+    };
     meta = with lib; {
       description = "Provides build shell that can automatically figure out dependencies";
       homepage = "https://github.com/RaitoBezarius/buildxyz";

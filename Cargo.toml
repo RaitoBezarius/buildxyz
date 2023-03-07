@@ -13,3 +13,5 @@ stderrlog = "0.5.4"
 ctrlc = "3.2.5"
 clap = { version = "4.1.8", features = [ "derive" ] }
 crossbeam-channel = "0.5.7"
+nix-index = { git = "https://github.com/bennofs/nix-index", rev = "v0.1.5" }
+xdg = "2.4.1"
