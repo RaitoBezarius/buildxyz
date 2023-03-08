@@ -1,4 +1,5 @@
 use std::fs::File;
+use std::io::Cursor;
 /// Creating and searching file databases.
 ///
 /// This module implements an abstraction for creating an index of files with meta information
@@ -139,7 +140,28 @@ impl From<frcode::Error> for Error {
 
 /// A Reader allows fast querying of a nix-index database.
 pub struct Reader {
-    decoder: frcode::Decoder<BufReader<zstd::Decoder<'static, BufReader<File>>>>,
+    decoder: frcode::Decoder<Cursor<Vec<u8>>> // BufReader<zstd::Decoder<'static, BufReader<File>>>>,
+}
+
+pub fn read_raw_buffer<P: AsRef<Path>>(path: P) -> Result<Vec<u8>> {
+    let mut file = File::open(path)?;
+    let mut magic = [0u8; 4];
+    file.read_exact(&mut magic)?;
+
+    if magic != FILE_MAGIC {
+        return Err(ErrorKind::UnsupportedFileType(magic.to_vec()).into());
+    }
+
+    let version = file.read_u64::<LittleEndian>()?;
+    if version != FORMAT_VERSION {
+        return Err(ErrorKind::UnsupportedVersion(version).into());
+    }
+
+    let mut decoder = zstd::Decoder::new(file)?;
+    let mut buffer: Vec<u8> = Vec::new();
+    decoder.read_to_end(&mut buffer)?;
+
+    Ok(buffer)
 }
 
 impl Reader {
@@ -147,22 +169,12 @@ impl Reader {
     ///
     /// If the path does not exist or is not a valid database, an error is returned.
     pub fn open<P: AsRef<Path>>(path: P) -> Result<Reader> {
-        let mut file = File::open(path)?;
-        let mut magic = [0u8; 4];
-        file.read_exact(&mut magic)?;
+        Reader::from_buffer(read_raw_buffer(path)?)
+    }
 
-        if magic != FILE_MAGIC {
-            return Err(ErrorKind::UnsupportedFileType(magic.to_vec()).into());
-        }
-
-        let version = file.read_u64::<LittleEndian>()?;
-        if version != FORMAT_VERSION {
-            return Err(ErrorKind::UnsupportedVersion(version).into());
-        }
-
-        let decoder = zstd::Decoder::new(file)?;
+    pub fn from_buffer(buffer: Vec<u8>) -> Result<Reader> {
         Ok(Reader {
-            decoder: frcode::Decoder::new(BufReader::new(decoder)),
+            decoder: frcode::Decoder::new(Cursor::new(buffer))
         })
     }
 
@@ -172,7 +184,7 @@ impl Reader {
     pub fn query(self, exact_regex: &Regex) -> Query {
         Query {
             reader: self,
-            exact_regex: exact_regex,
+            exact_regex,
             hash: None,
             package_pattern: None,
         }
@@ -213,13 +225,13 @@ pub struct Query<'a, 'b> {
 impl<'a, 'b> Query<'a, 'b> {
     /// Limit results to entries from the package with the specified hash if `Some`.
     pub fn hash(self, hash: Option<String>) -> Query<'a, 'b> {
-        Query { hash: hash, ..self }
+        Query { hash, ..self }
     }
 
     /// Limit results to entries from packages whose name matches the given regex if `Some`.
     pub fn package_pattern(self, package_pattern: Option<&'b Regex>) -> Query<'a, 'b> {
         Query {
-            package_pattern: package_pattern,
+            package_pattern,
             ..self
         }
     }

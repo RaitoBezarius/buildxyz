@@ -53,7 +53,7 @@
 //!
 //! Through this encoding, the size of the index is typically reduces by a factor of 3 to 5.
 use std::cmp;
-use std::io::{self, BufRead, Write};
+use std::io::{self, BufRead, Write, Seek};
 use std::ops::{Deref, DerefMut};
 
 use error_chain::{bail, error_chain};
@@ -160,6 +160,18 @@ pub struct Decoder<R> {
     buf: ResizableBuf,
     /// Current write position in buf. The next decoded byte should be written to buf[pos].
     pos: usize,
+}
+
+impl<R: BufRead + Seek> Decoder<R> {
+    /// Resets the decoder at the start for furthe reuse.
+    pub fn reset(&mut self) -> Result<()> {
+        self.reader.seek(io::SeekFrom::Start(0))?;
+        self.pos = 0;
+        self.last_path = 0;
+        self.shared_len = 0;
+        self.partial_entry_start = 0;
+        Ok(())
+    }
 }
 
 impl<R: BufRead> Decoder<R> {
