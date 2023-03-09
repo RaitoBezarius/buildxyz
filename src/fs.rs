@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::path::Path;
-use std::time::{SystemTime, Duration};
+use std::time::{SystemTime, Duration, Instant};
 
 // TODO: is it Linux-specific?
 use std::ffi::OsStr;
@@ -159,6 +159,7 @@ impl Filesystem for BuildXYZ {
         let prefix = Path::new(self.parent_prefixes.get(&parent).expect("Unknown parent inode!"));
         let target_path = prefix.join(name);
         debug!("looking for: {}$ in Nix database (parent inode: {parent})", target_path.to_string_lossy());
+        let now = Instant::now();
         let candidates: Vec<(StorePath, FileTreeEntry)> = db.query(&Regex::new(format!(r"{}$", target_path.to_string_lossy()).as_str()).unwrap())
             .run()
             .expect("Failed to query the database")
@@ -166,6 +167,7 @@ impl Filesystem for BuildXYZ {
             .map(|result| result.expect("Failed to obtain candidate"))
             .collect();
         trace!("{:?}", candidates);
+        debug!("search took {:.2?}", now.elapsed());
 
         if !candidates.is_empty() {
             // TODO: immutable borrow stuff with allocate_inode()
