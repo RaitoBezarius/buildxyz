@@ -35,4 +35,7 @@ Also, this example illustrates two more things:
 - Development packages containing other development outputs: `bulletml` for example
 - Multi-language development package containing native dependency output: `python$VERPackages.boost$VER.dev`.
 
+Also, consider `pip`, the Python package manager, it can be found in many closures of Python environments, some of them can be very big (3GiB), it is desirable to select the candidate that minimize realizations and moving bytes around. Unfortunately, the smallest closure containing a `bin/pip` is not `python3Packages.pip` but `cope`. Therefore, relying only on minimizing the closure size is not a good idea, otherwise false positives will probably be important.
+For this, a popularity database can be built out of the nix-index machinery to index also a popularity score based on (reverse-)dependency relation.
+
 For BuildXYZ to operate properly, it should be possible to detect the desired version or to operate in some sort of "fuzzing" mechanism where it will record the candidate it has chose for some branching situation and it will try to find out what are the range of possibilities regarding a certain packaging situation.
