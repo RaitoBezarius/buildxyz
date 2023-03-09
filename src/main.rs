@@ -10,6 +10,8 @@ use std::io;
 use clap::Parser;
 use memfile::MemFile;
 
+// mod instrument;
+mod nix;
 mod fs;
 mod cache;
 

@@ -14,6 +14,7 @@ use regex::bytes::Regex;
 
 use crate::cache::{FileNode, StorePath, FileTreeEntry, cache_dir};
 use crate::cache::database::{Reader, read_raw_buffer};
+use crate::nix::{realize_path, get_path_size};
 
 const UNIX_EPOCH: SystemTime = SystemTime::UNIX_EPOCH;
 
@@ -92,7 +93,7 @@ impl<T> Into<fuser::FileAttr> for FileNode<T> {
     }
 }
 
-fn extract_optimal_file_attr(candidates: &Vec<(StorePath, FileTreeEntry)>, offered_inode: u64) -> (fuser::FileAttr, Vec<u8>) {
+fn extract_optimal_file_attr(candidates: &mut Vec<(StorePath, FileTreeEntry)>, offered_inode: u64) -> (fuser::FileAttr, Vec<u8>) {
     // 1. There cannot be a folder and a file at the same time in `candidates`
     debug_assert!(
         candidates.into_iter().all(|(_, c)| is_file_or_symlink(&c.node)) ||
@@ -101,8 +102,15 @@ fn extract_optimal_file_attr(candidates: &Vec<(StorePath, FileTreeEntry)>, offer
     );
 
     // Ranking algorithm
-    // For now, the first?
-    
+    // For now, the smallest
+   
+    // Smallest known size for now.
+    candidates.sort_by_cached_key(|(store_path, _)| {
+        let stpath_str = store_path.as_str();
+        get_path_size(&stpath_str, crate::nix::StoreKind::Local)
+        .or_else(|| get_path_size(&stpath_str, crate::nix::StoreKind::Remote("https://cache.nixos.org".to_string())))
+        .or(Some(usize::MAX))
+    });
     let (store_path, ft_entry) = candidates.first().unwrap();
 
     let mut fattr: fuser::FileAttr = ft_entry.node.clone().into();
@@ -154,13 +162,19 @@ impl Filesystem for BuildXYZ {
             }
         }
 
+        // No other global directories.
+        if parent == 1 {
+            reply.error(nix::errno::Errno::ENOENT as i32);
+            return;
+        }
+
         // TODO: put me behind Arc
         let db = Reader::from_buffer(self.index_buffer.clone()).expect("Failed to open database");
         let prefix = Path::new(self.parent_prefixes.get(&parent).expect("Unknown parent inode!"));
         let target_path = prefix.join(name);
         debug!("looking for: {}$ in Nix database (parent inode: {parent})", target_path.to_string_lossy());
         let now = Instant::now();
-        let candidates: Vec<(StorePath, FileTreeEntry)> = db.query(&Regex::new(format!(r"{}$", target_path.to_string_lossy()).as_str()).unwrap())
+        let mut candidates: Vec<(StorePath, FileTreeEntry)> = db.query(&Regex::new(format!(r"{}$", target_path.to_string_lossy()).as_str()).unwrap())
             .run()
             .expect("Failed to query the database")
             .into_iter()
@@ -173,10 +187,13 @@ impl Filesystem for BuildXYZ {
             // TODO: immutable borrow stuff with allocate_inode()
             self.last_inode += 1;
             // FileAttr based on available candidates
-            let (attr, nix_path) = extract_optimal_file_attr(&candidates,
+            let (attr, nix_path) = extract_optimal_file_attr(&mut candidates,
                 self.last_inode - 1);
             trace!("{}: {:?}", String::from_utf8_lossy(&nix_path), attr);
             self.parent_prefixes.insert(self.last_inode - 1, target_path.to_string_lossy().to_string());
+            // Realize the path
+            // TODO: can I realize it after answering to the caller?
+            realize_path(String::from_utf8_lossy(&nix_path).into()).expect("Nix path should be realized, database seems incoherent with store");
             self.nix_paths.insert(self.last_inode - 1, nix_path);
             // 20 mns ttl
             reply.entry(&Duration::from_secs(60*20), &attr, attr.ino);
@@ -191,7 +208,13 @@ impl Filesystem for BuildXYZ {
 
     fn readlink(&mut self, _req: &fuser::Request<'_>, ino: u64, reply: fuser::ReplyData) {
         if let Some(nix_path) = self.nix_paths.get(&ino) {
-            reply.data(nix_path);
+            // Ensure the path is realized, it could have been gc'd between the lookup and the
+            // readlink.
+            if realize_path(String::from_utf8_lossy(&nix_path).into()).is_err() {
+                reply.error(nix::errno::Errno::ENOENT as i32);
+            } else {
+                reply.data(nix_path);
+            }
         } else {
             reply.error(nix::errno::Errno::ENOENT as i32);
         }
