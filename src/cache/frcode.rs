@@ -163,7 +163,7 @@ pub struct Decoder<R> {
 }
 
 impl<R: BufRead + Seek> Decoder<R> {
-    /// Resets the decoder at the start for furthe reuse.
+    /// Resets the decoder at the start for further reuse.
     pub fn reset(&mut self) -> Result<()> {
         self.reader.seek(io::SeekFrom::Start(0))?;
         self.pos = 0;
@@ -387,6 +387,7 @@ impl<R: BufRead> Decoder<R> {
         self.partial_entry_start = memchr::memrchr(b'\n', &self.buf[..self.pos])
             .ok_or_else(|| ErrorKind::MissingNewline)?
             + 1;
+
         Ok(&mut self.buf[item_start..self.partial_entry_start])
     }
 }
