@@ -6,7 +6,7 @@ use std::time::{SystemTime, Duration};
 use std::ffi::OsStr;
 use std::os::unix::prelude::OsStrExt;
 
-use fuser::{Filesystem, FileAttr};
+use fuser::{Filesystem, FileAttr, FileType};
 
 use log::{debug, trace, info};
 
@@ -38,6 +38,28 @@ impl Default for BuildXYZ {
 }
 
 
+#[inline]
+fn build_fake_fattr(ino: u64, kind: FileType) -> FileAttr {
+    fuser::FileAttr {
+        kind,
+        ino,
+        size: 1,
+        blocks: 1,
+        blksize: 1,
+        atime: UNIX_EPOCH,
+        mtime: UNIX_EPOCH,
+        crtime: UNIX_EPOCH,
+        ctime: UNIX_EPOCH,
+        flags: 0,
+        uid: 0,
+        gid: 0, 
+        nlink: 1,
+        rdev: 0,
+        perm: 777
+    }
+}
+
+
 fn is_file_or_symlink<T>(n: &FileNode<T>) -> bool {
     match n {
         FileNode::Regular { .. } => true,
@@ -65,25 +87,8 @@ impl<T> Into<fuser::FileAttr> for FileNode<T> {
             Self::Symlink { .. } => fuser::FileType::Symlink,
             Self::Directory { .. } => fuser::FileType::Directory
         };
-        let only_time_that_exist = SystemTime::UNIX_EPOCH;
 
-        fuser::FileAttr {
-            kind,
-            ino: 1,
-            size: 1,
-            blocks: 1,
-            blksize: 1,
-            atime: only_time_that_exist,
-            mtime: only_time_that_exist,
-            crtime: only_time_that_exist,
-            ctime: only_time_that_exist,
-            flags: 0,
-            uid: 0,
-            gid: 0, 
-            nlink: 1,
-            rdev: 0,
-            perm: 777
-        }
+        build_fake_fattr(1, kind)
     }
 }
 
@@ -144,25 +149,7 @@ impl Filesystem for BuildXYZ {
         if let Some(inode) = self.global_dirs.get(&name.to_string_lossy().to_string()) {
             if parent == 1 {
                 trace!("global directory hit: {}", name.to_string_lossy());
-                let only_time_that_exist = SystemTime::UNIX_EPOCH;
-                let attr = FileAttr {
-                    kind: fuser::FileType::Directory,
-                    ino: *inode,
-                    size: 1,
-                    blocks: 1,
-                    blksize: 1,
-                    atime: only_time_that_exist,
-                    mtime: only_time_that_exist,
-                    crtime: only_time_that_exist,
-                    ctime: only_time_that_exist,
-                    flags: 0,
-                    uid: 0,
-                    gid: 0, 
-                    nlink: 1,
-                    rdev: 0,
-                    perm: 777
-                };
-                reply.entry(&Duration::from_secs(60*60), &attr, *inode);
+                reply.entry(&Duration::from_secs(60*60), &build_fake_fattr(*inode, FileType::Directory), *inode);
                 return;
             }
         }
