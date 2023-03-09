@@ -4,6 +4,7 @@
 , pkg-config
 , openssl
 , zstd
+, cargo-flamegraph
 , rustPlatform
 , lib
 , runCommand
@@ -23,7 +24,7 @@ rustPlatform.buildRustPackage
       cp -r ${./src} $out/src
     '';
     buildInputs = [ fuse openssl zstd ];
-    nativeBuildInputs = [ pkg-config ] ++ lib.optional enableLint clippy;
+    nativeBuildInputs = [ cargo-flamegraph pkg-config ] ++ lib.optional enableLint clippy;
     cargoLock = {
       lockFile = ./Cargo.lock;
      # outputHashes = {
