@@ -13,17 +13,6 @@ use memfile::MemFile;
 mod fs;
 mod cache;
 
-/// Request types between FUSE thread and UI thread
-enum Request {
-    /// An interactive search request for the given path to the UI thread
-    InteractiveSearch(String)
-}
-
-/// Response types between UI thread and FUSE thread
-enum Response {
-    PackageSuggestion(String)
-}
-
 // 2 directories:
 // - FUSE filesystem for negative lookups
 // - normal filesystem for building the build environment (buildEnv)
