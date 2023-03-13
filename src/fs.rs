@@ -145,8 +145,8 @@ impl BuildXYZ {
 impl Filesystem for BuildXYZ {
     fn init(&mut self, _req: &fuser::Request<'_>, _config: &mut fuser::KernelConfig) -> Result<(), i32> {
         self.parent_prefixes.insert(0, "".to_string());
-        // Create bin, lib, include inodes
-        for fhs_dir in ["bin", "lib", "include"] {
+        // Create bin, lib, include, pkg-config inodes
+        for fhs_dir in ["bin", "lib", "include", "pkgconfig"] {
             let inode = self.allocate_inode();
             self.parent_prefixes.insert(inode, fhs_dir.to_string());
             self.global_dirs.insert(fhs_dir.to_string(), inode);
@@ -201,10 +201,13 @@ impl Filesystem for BuildXYZ {
 
             let (attr, nix_path) = extract_optimal_file_attr(&mut candidates,
                 self.last_inode - 1, |(store_path, _)| {
+                    trace!("extracting pop for {}", store_path.as_str());
                     // Highest popularity comes first, so inverted popularity works here.
-                    -(*self.popcount_buffer
+                    let pop = -(*self.popcount_buffer
                         .native_build_inputs
-                        .get(&store_path.as_str().to_string()).expect("Graph should be complete") as i32)
+                        .get(&store_path.as_str().to_string()).unwrap_or(&0) as i32);
+                    trace!("pop: {pop}");
+                    pop
                 });
             trace!("{}: {:?}", String::from_utf8_lossy(&nix_path), attr);
             self.parent_prefixes.insert(self.last_inode - 1, target_path.to_string_lossy().to_string());
