@@ -14,6 +14,7 @@ use memfile::MemFile;
 mod nix;
 mod fs;
 mod cache;
+mod popcount;
 
 // 2 directories:
 // - FUSE filesystem for negative lookups

@@ -1,4 +1,6 @@
 use std::collections::HashMap;
+use std::fs::File;
+use std::io::BufReader;
 use std::path::Path;
 use std::time::{SystemTime, Duration, Instant};
 
@@ -15,11 +17,13 @@ use regex::bytes::Regex;
 use crate::cache::{FileNode, StorePath, FileTreeEntry, cache_dir};
 use crate::cache::database::{Reader, read_raw_buffer};
 use crate::nix::{realize_path, get_path_size};
+use crate::popcount::Popcount;
 
 const UNIX_EPOCH: SystemTime = SystemTime::UNIX_EPOCH;
 
 pub struct BuildXYZ {
     pub index_buffer: Vec<u8>,
+    pub popcount_buffer: Popcount,
     pub global_dirs: HashMap<String, u64>, /// "global path" -> inode
     pub parent_prefixes: HashMap<u64, String>, /// inode -> "virtual paths"
     pub nix_paths: HashMap<u64, Vec<u8>>, /// inode -> nix store paths
@@ -29,6 +33,9 @@ pub struct BuildXYZ {
 impl Default for BuildXYZ {
     fn default() -> Self {
         BuildXYZ {
+            popcount_buffer: serde_json::from_reader(
+                                 BufReader::new(File::open("popcount-graph.json").expect("Failed to open popcount-graph.json"))
+            ).expect("Failed to read popcount graph in JSON"),
             index_buffer: read_raw_buffer(Path::new(cache_dir()).join("files")).expect("Failed to read the index buffer"),
             global_dirs: HashMap::new(),
             parent_prefixes: HashMap::new(),
@@ -93,7 +100,12 @@ impl<T> Into<fuser::FileAttr> for FileNode<T> {
     }
 }
 
-fn extract_optimal_file_attr(candidates: &mut Vec<(StorePath, FileTreeEntry)>, offered_inode: u64) -> (fuser::FileAttr, Vec<u8>) {
+fn extract_optimal_file_attr<F>(candidates: &mut Vec<(StorePath, FileTreeEntry)>,
+    offered_inode: u64,
+    sort_key_function: F) -> (fuser::FileAttr, Vec<u8>)
+where
+    F: FnMut(&(StorePath, FileTreeEntry)) -> i32
+{
     // 1. There cannot be a folder and a file at the same time in `candidates`
     debug_assert!(
         candidates.into_iter().all(|(_, c)| is_file_or_symlink(&c.node)) ||
@@ -101,16 +113,9 @@ fn extract_optimal_file_attr(candidates: &mut Vec<(StorePath, FileTreeEntry)>, o
         "either candidates are all directories, either all files, not in-between."
     );
 
-    // Ranking algorithm
-    // For now, the smallest
-   
-    // Smallest known size for now.
-    candidates.sort_by_cached_key(|(store_path, _)| {
-        let stpath_str = store_path.as_str();
-        get_path_size(&stpath_str, crate::nix::StoreKind::Local)
-        .or_else(|| get_path_size(&stpath_str, crate::nix::StoreKind::Remote("https://cache.nixos.org".to_string())))
-        .or(Some(usize::MAX))
-    });
+    // FIXME: is it enough for the ranking algorithm?
+    candidates.sort_by_cached_key(sort_key_function);
+
     let (store_path, ft_entry) = candidates.first().unwrap();
 
     let mut fattr: fuser::FileAttr = ft_entry.node.clone().into();
@@ -187,8 +192,20 @@ impl Filesystem for BuildXYZ {
             // TODO: immutable borrow stuff with allocate_inode()
             self.last_inode += 1;
             // FileAttr based on available candidates
+            // candidates.sort_by_cached_key(|(store_path, _)| {
+   //     let stpath_str = store_path.as_str();
+   //     get_path_size(&stpath_str, crate::nix::StoreKind::Local)
+   //     .or_else(|| get_path_size(&stpath_str, crate::nix::StoreKind::Remote("https://cache.nixos.org".to_string())))
+   //     .or(Some(usize::MAX))
+   // });
+
             let (attr, nix_path) = extract_optimal_file_attr(&mut candidates,
-                self.last_inode - 1);
+                self.last_inode - 1, |(store_path, _)| {
+                    // Highest popularity comes first, so inverted popularity works here.
+                    -(*self.popcount_buffer
+                        .native_build_inputs
+                        .get(&store_path.as_str().to_string()).expect("Graph should be complete") as i32)
+                });
             trace!("{}: {:?}", String::from_utf8_lossy(&nix_path), attr);
             self.parent_prefixes.insert(self.last_inode - 1, target_path.to_string_lossy().to_string());
             // Realize the path
