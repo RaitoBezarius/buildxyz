@@ -53,7 +53,7 @@
 //!
 //! Through this encoding, the size of the index is typically reduces by a factor of 3 to 5.
 use std::cmp;
-use std::io::{self, BufRead, Write, Seek};
+use std::io::{self, BufRead, Seek, Write};
 use std::ops::{Deref, DerefMut};
 
 use error_chain::{bail, error_chain};
@@ -374,7 +374,7 @@ impl<R: BufRead> Decoder<R> {
                     .checked_add(diff)
                     .ok_or_else(|| ErrorKind::SharedOverflow {
                         shared_len: self.shared_len,
-                        diff
+                        diff,
                     })?;
 
             // Copy the shared prefix

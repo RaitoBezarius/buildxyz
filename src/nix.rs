@@ -1,12 +1,12 @@
-use std::process::{Command, Stdio};
-use serde::Deserialize;
 use log::trace;
+use serde::Deserialize;
+use std::process::{Command, Stdio};
 
-use error_chain::{error_chain, bail};
+use error_chain::{bail, error_chain};
 
 pub enum StoreKind {
     Local,
-    Remote(String)
+    Remote(String),
 }
 
 error_chain! {
@@ -33,8 +33,8 @@ pub fn realize_path(path: String) -> Result<()> {
 
 #[derive(Deserialize)]
 struct PathInfo {
-    #[serde(rename="closureSize")]
-    closure_size: Option<usize>
+    #[serde(rename = "closureSize")]
+    closure_size: Option<usize>,
 }
 
 /// Returns `nix path-info -S <path> --store <store> if there's any remote store.
@@ -42,24 +42,23 @@ struct PathInfo {
 /// This returns the closure size.
 pub fn get_path_size(path: &str, store: StoreKind) -> Option<usize> {
     let mut cmd0 = Command::new("nix");
-    let mut cmd = cmd0
-        .arg("path-info")
-        .arg("--json")
-        .arg("-S")
-        .arg(path);
+    let mut cmd = cmd0.arg("path-info").arg("--json").arg("-S").arg(path);
 
     cmd = match store {
         StoreKind::Local => cmd,
-        StoreKind::Remote(remote_store) =>
-            cmd.arg("--store").arg(remote_store)
+        StoreKind::Remote(remote_store) => cmd.arg("--store").arg(remote_store),
     };
 
     let output = cmd.output().expect("Failed to extract path information");
 
-    trace!("nix path-info output: {}", String::from_utf8_lossy(&output.stdout));
+    trace!(
+        "nix path-info output: {}",
+        String::from_utf8_lossy(&output.stdout)
+    );
 
     if output.status.success() {
-        let pinfos: Vec<PathInfo> = serde_json::from_slice(&output.stdout).expect("Valid JSON from nix path-info --json");
+        let pinfos: Vec<PathInfo> =
+            serde_json::from_slice(&output.stdout).expect("Valid JSON from nix path-info --json");
         pinfos.first().expect("At least one path-info").closure_size
     } else {
         None

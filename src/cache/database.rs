@@ -140,7 +140,7 @@ impl From<frcode::Error> for Error {
 
 /// A Reader allows fast querying of a nix-index database.
 pub struct Reader {
-    decoder: frcode::Decoder<Cursor<Vec<u8>>> // BufReader<zstd::Decoder<'static, BufReader<File>>>>,
+    decoder: frcode::Decoder<Cursor<Vec<u8>>>, // BufReader<zstd::Decoder<'static, BufReader<File>>>>,
 }
 
 pub fn read_raw_buffer<P: AsRef<Path>>(path: P) -> Result<Vec<u8>> {
@@ -174,7 +174,7 @@ impl Reader {
 
     pub fn from_buffer(buffer: Vec<u8>) -> Result<Reader> {
         Ok(Reader {
-            decoder: frcode::Decoder::new(Cursor::new(buffer))
+            decoder: frcode::Decoder::new(Cursor::new(buffer)),
         })
     }
 
@@ -332,7 +332,7 @@ fn next_matching_line<M: Matcher<Error = NoError>>(
         // for an empty "line" at the end of the buffer
         // since this is not a line match, return None
         if start == buf.len() {
-            return None
+            return None;
         };
 
         let (pos, confirmed) = match candidate {

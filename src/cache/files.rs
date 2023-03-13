@@ -6,8 +6,8 @@ use std::collections::HashMap;
 use std::io::{self, Write};
 use std::str::{self, FromStr};
 
-use clap::ValueEnum;
 use clap::builder::PossibleValue;
+use clap::ValueEnum;
 use memchr::memchr;
 use serde::{Deserialize, Serialize};
 use serde_bytes::ByteBuf;
