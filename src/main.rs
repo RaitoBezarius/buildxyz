@@ -63,15 +63,19 @@ fn main() -> Result<(), io::Error> {
     // PATH_XXX="build env:negative lookup folder (FUSE)"
 
     // Let's keep PATH for now.
-    let mut instrumented_env: HashMap<String, String> = std::env::vars()
-        .filter(|&(ref k, _)|
-            //             keep virtual envs.
-            k == "PATH" || k == "PYTHONHOME"
-        ).collect();
+    let mut instrumented_env: HashMap<String, String> = std::env::vars().collect();
+    //    .filter(|&(ref k, _)|
+    //        //             keep virtual envs.
+    //        k == "PATH" || k == "PYTHONHOME"
+    //    ).collect();
 
     instrumented_env.entry("PATH".to_string())
         .and_modify(|env_path| {
-            *env_path = format!("/tmp/buildxyz/bin:{env_path}");
+            *env_path = format!("{env_path}:/tmp/buildxyz/bin");
+        });
+    instrumented_env.entry("PKG_CONFIG_PATH".to_string())
+        .and_modify(|env_path| {
+            *env_path = format!("{env_path}:/tmp/buildxyz/pkgconfig");
         });
 
     if let [cmd, cmd_args @ ..] = &args.cmd.split_ascii_whitespace().collect::<Vec<&str>>()[..] {
