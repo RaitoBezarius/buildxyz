@@ -17,7 +17,6 @@ xdg = "2.4.1"
 tui = "0.19.0"
 crossterm = "0.25"
 signal-hook = "0.3.15"
-memfile = "0.2.1"
 # nix-index dependencies
 regex = "1.7.1"
 error-chain = "0.12.4"
