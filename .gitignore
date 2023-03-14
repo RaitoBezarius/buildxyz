@@ -12,3 +12,5 @@
 
 # nix
 /result
+.direnv
+test-venv

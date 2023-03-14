@@ -2,6 +2,9 @@
 , macfuse-stubs
 , stdenv
 , pkg-config
+, openssl
+, zstd
+, cargo-flamegraph
 , rustPlatform
 , lib
 , runCommand
@@ -20,9 +23,15 @@ rustPlatform.buildRustPackage
       install -D ${./Cargo.lock} $out/Cargo.lock
       cp -r ${./src} $out/src
     '';
-    buildInputs = [ fuse ];
-    nativeBuildInputs = [ pkg-config ] ++ lib.optional enableLint clippy;
-    cargoLock.lockFile = ./Cargo.lock;
+    # Use provided zstd rather than vendored one.
+    ZSTD_SYS_USE_PKG_CONFIG = true;
+
+    buildInputs = [ zstd fuse ];
+    nativeBuildInputs = [ openssl cargo-flamegraph pkg-config ] ++ lib.optional enableLint clippy;
+
+    cargoLock = {
+      lockFile = ./Cargo.lock;
+    };
     meta = with lib; {
       description = "Provides build shell that can automatically figure out dependencies";
       homepage = "https://github.com/RaitoBezarius/buildxyz";
