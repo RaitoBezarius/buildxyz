@@ -1,14 +1,14 @@
+use ::nix::sys::signal::Signal::{SIGINT, SIGKILL, SIGTERM};
+use ::nix::unistd::Pid;
 use cache::database::read_raw_buffer;
 use clap::Parser;
 use fuser::spawn_mount2;
 use log::{debug, info};
-use ::nix::sys::signal::Signal::{SIGTERM, SIGINT, SIGKILL};
-use ::nix::unistd::Pid;
 use std::io;
 use std::path::PathBuf;
-use std::sync::Arc;
-use std::sync::mpsc::channel;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::sync::mpsc::channel;
+use std::sync::Arc;
 
 // mod instrument;
 mod cache;
@@ -19,7 +19,7 @@ mod runner;
 
 pub enum EventMessage {
     Stop,
-    Done
+    Done,
 }
 
 // 2 directories:
@@ -34,7 +34,7 @@ struct Args {
     database: PathBuf,
     /// In case of failures, retry automatically the invocation
     #[arg(long = "r", default_value_t = false)]
-    retry: bool
+    retry: bool,
 }
 
 fn main() -> Result<(), io::Error> {
@@ -48,8 +48,11 @@ fn main() -> Result<(), io::Error> {
     let ctrlc_event = send_event.clone();
     ctrlc::set_handler(move || {
         info!("Ctrl-C received...");
-        ctrlc_event.send(EventMessage::Stop).expect("Failed to send Ctrl-C event to the main thread");
-    }).expect("Failed to set Ctrl-C handler");
+        ctrlc_event
+            .send(EventMessage::Stop)
+            .expect("Failed to send Ctrl-C event to the main thread");
+    })
+    .expect("Failed to set Ctrl-C handler");
     // FIXME: register SIGTERM too.
 
     stderrlog::new()
@@ -82,10 +85,14 @@ fn main() -> Result<(), io::Error> {
         let run_join_handle = runner::spawn_instrumented_program(
             cmd.to_string(),
             // FIXME: ugh ugly
-            cmd_args.to_vec().into_iter().map(|s| s.to_string()).collect(),
+            cmd_args
+                .to_vec()
+                .into_iter()
+                .map(|s| s.to_string())
+                .collect(),
             std::env::vars().collect(),
             current_child_pid.clone(),
-            retry.clone()
+            retry.clone(),
         );
 
         // Main event loop
@@ -100,18 +107,26 @@ fn main() -> Result<(), io::Error> {
                     if raw_pid != 0 {
                         debug!("ENOENT all pending fs requests...");
                         debug!("Will kill {:?}", pid);
-                        ::nix::sys::signal::kill(pid, match stop_count {
-                            2 => SIGTERM,
-                            k if k >= 3 => SIGKILL,
-                            _ => SIGINT
-                        }).expect("Failed to interrupt the current underlying process");
+                        ::nix::sys::signal::kill(
+                            pid,
+                            match stop_count {
+                                2 => SIGTERM,
+                                k if k >= 3 => SIGKILL,
+                                _ => SIGINT,
+                            },
+                        )
+                        .expect("Failed to interrupt the current underlying process");
                     } else {
-                        send_event.send(EventMessage::Done).expect("Failed to send event");
+                        send_event
+                            .send(EventMessage::Done)
+                            .expect("Failed to send event");
                     }
-                },
+                }
                 EventMessage::Done => {
                     info!("Waiting for the runner thread to exit...");
-                    run_join_handle.join().expect("Failed to wait for the runner thread");
+                    run_join_handle
+                        .join()
+                        .expect("Failed to wait for the runner thread");
                     info!("Unmounting the filesystem...");
                     session.join();
                     break;
