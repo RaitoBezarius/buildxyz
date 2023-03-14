@@ -23,8 +23,12 @@ rustPlatform.buildRustPackage
       install -D ${./Cargo.lock} $out/Cargo.lock
       cp -r ${./src} $out/src
     '';
-    buildInputs = [ fuse ];
-    nativeBuildInputs = [ openssl zstd cargo-flamegraph pkg-config ] ++ lib.optional enableLint clippy;
+    # Use provided zstd rather than vendored one.
+    ZSTD_SYS_USE_PKG_CONFIG = true;
+
+    buildInputs = [ zstd fuse ];
+    nativeBuildInputs = [ openssl cargo-flamegraph pkg-config ] ++ lib.optional enableLint clippy;
+
     cargoLock = {
       lockFile = ./Cargo.lock;
     };
