@@ -2,7 +2,7 @@ use std::sync::Arc;
 use std::sync::atomic::{Ordering, AtomicBool, AtomicU32};
 use std::{collections::HashMap, sync::mpsc::Sender};
 use std::process::Command;
-use log::{info, error};
+use log::{info, error, debug};
 use std::thread;
 
 pub fn spawn_instrumented_program(
@@ -33,6 +33,7 @@ pub fn spawn_instrumented_program(
 
             // Send our PID so we can get killed if needed.
             current_child_pid.store(child.id(), Ordering::SeqCst);
+            debug!("Child spawned with PID {}, waiting...", child.id());
             let status = child.wait().expect("Failed to wait for child");
             let success = status.success();
             if !success && should_retry.load(Ordering::SeqCst) {

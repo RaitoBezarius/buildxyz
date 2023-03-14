@@ -1,7 +1,7 @@
 use cache::database::read_raw_buffer;
 use clap::Parser;
 use fuser::spawn_mount2;
-use log::info;
+use log::{debug, info};
 use ::nix::sys::signal::Signal::{SIGTERM, SIGINT, SIGKILL};
 use ::nix::unistd::Pid;
 use std::io;
@@ -17,7 +17,7 @@ mod nix;
 mod popcount;
 mod runner;
 
-enum EventMessage {
+pub enum EventMessage {
     Stop,
     Done
 }
@@ -85,7 +85,7 @@ fn main() -> Result<(), io::Error> {
             cmd_args.to_vec().into_iter().map(|s| s.to_string()).collect(),
             std::env::vars().collect(),
             current_child_pid.clone(),
-            retry.clone(),
+            retry.clone()
         );
 
         // Main event loop
@@ -95,14 +95,22 @@ fn main() -> Result<(), io::Error> {
                 EventMessage::Stop => {
                     stop_count += 1;
                     retry.store(false, Ordering::SeqCst);
-                    let pid = Pid::from_raw(current_child_pid.load(Ordering::SeqCst) as i32);
-                    ::nix::sys::signal::kill(pid, match stop_count {
-                        2 => SIGTERM,
-                        k if k >= 3 => SIGKILL,
-                        _ => SIGINT
-                    }).expect("Failed to interrupt the current underlying process");
+                    let raw_pid = current_child_pid.load(Ordering::SeqCst) as i32;
+                    let pid = Pid::from_raw(raw_pid);
+                    if raw_pid != 0 {
+                        debug!("ENOENT all pending fs requests...");
+                        debug!("Will kill {:?}", pid);
+                        ::nix::sys::signal::kill(pid, match stop_count {
+                            2 => SIGTERM,
+                            k if k >= 3 => SIGKILL,
+                            _ => SIGINT
+                        }).expect("Failed to interrupt the current underlying process");
+                    } else {
+                        send_event.send(EventMessage::Done).expect("Failed to send event");
+                    }
                 },
                 EventMessage::Done => {
+                    info!("Waiting for the runner thread to exit...");
                     run_join_handle.join().expect("Failed to wait for the runner thread");
                     info!("Unmounting the filesystem...");
                     session.join();
