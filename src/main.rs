@@ -2,19 +2,25 @@ use cache::database::read_raw_buffer;
 use clap::Parser;
 use fuser::spawn_mount2;
 use log::info;
-use memfile::MemFile;
-use std::collections::HashMap;
+use ::nix::sys::signal::Signal::{SIGTERM, SIGINT, SIGKILL};
+use ::nix::unistd::Pid;
 use std::io;
 use std::path::PathBuf;
-use std::process::{Command, Stdio};
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::mpsc::channel;
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
 // mod instrument;
 mod cache;
 mod fs;
 mod nix;
 mod popcount;
+mod runner;
+
+enum EventMessage {
+    Stop,
+    Done
+}
 
 // 2 directories:
 // - FUSE filesystem for negative lookups
@@ -26,27 +32,31 @@ struct Args {
     cmd: String,
     #[arg(long = "db", default_value_os = cache::cache_dir())]
     database: PathBuf,
+    /// In case of failures, retry automatically the invocation
+    #[arg(long = "r", default_value_t = false)]
+    retry: bool
 }
 
 fn main() -> Result<(), io::Error> {
     let args = Args::parse();
-    let mut stdout = io::stdout();
 
-    // TODO: .expect should be replaced to catch errors and unmount filesystem no matter what.
-    let terminate = Arc::new(AtomicBool::new(false));
+    // Signal to stop the current program
+    // If sent twice, uses SIGKILL
+    let (send_event, recv_event) = channel::<EventMessage>();
+    let mut stop_count = 0;
 
-    signal_hook::flag::register(signal_hook::consts::SIGTERM, Arc::clone(&terminate))
-        .expect("Failed to set SIGTERM handler");
+    let ctrlc_event = send_event.clone();
+    ctrlc::set_handler(move || {
+        info!("Ctrl-C received...");
+        ctrlc_event.send(EventMessage::Stop).expect("Failed to send Ctrl-C event to the main thread");
+    }).expect("Failed to set Ctrl-C handler");
+    // FIXME: register SIGTERM too.
+
     stderrlog::new()
         //.module(module_path!())
         .verbosity(4)
         .init()
         .unwrap();
-    let term = terminate.clone();
-    ctrlc::set_handler(move || {
-        term.store(true, Ordering::SeqCst);
-    })
-    .expect("Error setting the Ctrl-C handler");
 
     info!("Mounting the FUSE filesystem in the background...");
 
@@ -65,49 +75,41 @@ fn main() -> Result<(), io::Error> {
 
     info!("Running `{}`", args.cmd);
 
-    // 1. Setup the environment variables
-    // PATH_XXX="build env:negative lookup folder (FUSE)"
-
-    // Let's keep PATH for now.
-    let mut instrumented_env: HashMap<String, String> = std::env::vars().collect();
-    //    .filter(|&(ref k, _)|
-    //        //             keep virtual envs.
-    //        k == "PATH" || k == "PYTHONHOME"
-    //    ).collect();
-
-    instrumented_env
-        .entry("PATH".to_string())
-        .and_modify(|env_path| {
-            *env_path = format!("{env_path}:/tmp/buildxyz/bin");
-        });
-    instrumented_env
-        .entry("PKG_CONFIG_PATH".to_string())
-        .and_modify(|env_path| {
-            *env_path = format!("{env_path}:/tmp/buildxyz/pkgconfig");
-        });
-
+    let retry = Arc::new(AtomicBool::new(args.retry));
+    // FIXME uninitialized values are bad.
+    let current_child_pid = Arc::new(AtomicU32::new(0));
     if let [cmd, cmd_args @ ..] = &args.cmd.split_ascii_whitespace().collect::<Vec<&str>>()[..] {
-        let mut child_stdin_memfd =
-            MemFile::create_default("child_stdin").expect("Failed to memfd_create");
-        let mut child_stdout_memfd =
-            MemFile::create_default("child_stdout").expect("Failed to memfd_create");
+        let run_join_handle = runner::spawn_instrumented_program(
+            cmd.to_string(),
+            // FIXME: ugh ugly
+            cmd_args.to_vec().into_iter().map(|s| s.to_string()).collect(),
+            std::env::vars().collect(),
+            current_child_pid.clone(),
+            retry.clone(),
+        );
 
-        let mut child = Command::new(cmd)
-            //.stdin(child_stdin_memfd.try_clone().expect("Failed to dup memfd").into_file())
-            //.stdout(child_stdout_memfd.try_clone().expect("Failed to dup memfd").into_file())
-            .args(cmd_args)
-            .env_clear()
-            .envs(&instrumented_env)
-            .spawn()
-            .expect("Command failed to start");
-
-        child.wait().expect("Failed to wait for child");
-        info!("Command ended");
-
-        while !terminate.load(Ordering::SeqCst) {}
-
-        info!("Unmounting the filesystem...");
-        session.join();
+        // Main event loop
+        // We wait for either stop signal or done signal
+        loop {
+            match recv_event.recv().expect("Failed to receive message") {
+                EventMessage::Stop => {
+                    stop_count += 1;
+                    retry.store(false, Ordering::SeqCst);
+                    let pid = Pid::from_raw(current_child_pid.load(Ordering::SeqCst) as i32);
+                    ::nix::sys::signal::kill(pid, match stop_count {
+                        2 => SIGTERM,
+                        k if k >= 3 => SIGKILL,
+                        _ => SIGINT
+                    }).expect("Failed to interrupt the current underlying process");
+                },
+                EventMessage::Done => {
+                    run_join_handle.join().expect("Failed to wait for the runner thread");
+                    info!("Unmounting the filesystem...");
+                    session.join();
+                    break;
+                }
+            }
+        }
     } else {
         todo!("Dependent type theory in Rust");
     }
