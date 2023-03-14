@@ -6,13 +6,19 @@
       environment.systemPackages = [
         self.packages.${pkgs.targetPlatform.system}.buildxyz
       ];
+
+      # Ensure hello closure is here.
+      system.extraDependencies = [ pkgs.hello ];
     };
   };
 
   # This test is still wip
-  testScript = ''
-    start_all()
+  testScript =
+    ''
+      start_all()
 
-    node1.succeed("buildxyz")
-  '';
+      node1.succeed("mkdir -p /tmp/buildxyz")
+      # FIXME: This will not work because we do not have any database yet.
+      node1.execute("buildxyz hello")
+    '';
 })
