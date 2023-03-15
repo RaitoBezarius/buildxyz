@@ -23,13 +23,23 @@ pub fn spawn_ui(reply_fs: Sender<FsEventMessage>) -> (JoinHandle<()>, Sender<Use
         loop {
             match recv.recv().expect("Failed to receive message") {
                 UserRequest::Quit => { break; },
-                UserRequest::InteractiveSearch(_candidates, _suggested) => {
-                    // prompt the user with the suggestion: yes/no?
+                UserRequest::InteractiveSearch(_candidates, suggested) => {
+                    let mut answer = String::new();
+                    info!("Dependency requested, suggestion is `{}`, inject it? y/n", suggested.origin().attr);
+                    std::io::stdin()
+                        .read_line(&mut answer)
+                        .ok()
+                        .expect("Failed to read line");
+
+                    match answer.as_str().trim() {
+                        "y" | "yes" | "Y" => reply_fs.send(FsEventMessage::PackageSuggestion(suggested)),
+                        _ => reply_fs.send(FsEventMessage::IgnorePendingRequests)
+                    }.expect("Failed to send message to FS thread");
+
                     // list all the candidates with numbers
                     // provide ENOENT option
 
                     // ENOENT
-                    reply_fs.send(FsEventMessage::IgnorePendingRequests).expect("Failed to send message to FS thread");
                 }
             }
         }
