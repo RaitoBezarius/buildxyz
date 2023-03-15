@@ -16,6 +16,7 @@ mod fs;
 mod nix;
 mod popcount;
 mod runner;
+mod interactive;
 
 pub enum EventMessage {
     Stop,
@@ -40,13 +41,22 @@ struct Args {
 fn main() -> Result<(), io::Error> {
     let args = Args::parse();
 
+    stderrlog::new()
+        //.module(module_path!())
+        .verbosity(4)
+        .init()
+        .unwrap();
+
     // Signal to stop the current program
     // If sent twice, uses SIGKILL
     let (send_event, recv_event) = channel::<EventMessage>();
+    let (send_fs_event, recv_fs_event) = channel();
+    let (ui_join_handle, send_ui_event) = interactive::spawn_ui(send_fs_event.clone());
     let mut stop_count = 0;
 
     let ctrlc_event = send_event.clone();
     ctrlc::set_handler(move || {
+        println!("stop count: {}", stop_count);
         info!("Ctrl-C received...");
         ctrlc_event
             .send(EventMessage::Stop)
@@ -54,12 +64,6 @@ fn main() -> Result<(), io::Error> {
     })
     .expect("Failed to set Ctrl-C handler");
     // FIXME: register SIGTERM too.
-
-    stderrlog::new()
-        //.module(module_path!())
-        .verbosity(4)
-        .init()
-        .unwrap();
 
     info!("Mounting the FUSE filesystem in the background...");
 
@@ -69,6 +73,8 @@ fn main() -> Result<(), io::Error> {
     let session = spawn_mount2(
         fs::BuildXYZ {
             index_buffer,
+            recv_fs_event,
+            send_ui_event: send_ui_event.clone(),
             ..Default::default()
         },
         "/tmp/buildxyz",
@@ -95,6 +101,7 @@ fn main() -> Result<(), io::Error> {
             retry.clone(),
         );
 
+
         // Main event loop
         // We wait for either stop signal or done signal
         loop {
@@ -102,10 +109,16 @@ fn main() -> Result<(), io::Error> {
                 EventMessage::Stop => {
                     stop_count += 1;
                     retry.store(false, Ordering::SeqCst);
+                    send_ui_event
+                        .send(interactive::UserRequest::Quit)
+                        .expect("Failed to send message to UI thread");
                     let raw_pid = current_child_pid.load(Ordering::SeqCst) as i32;
                     let pid = Pid::from_raw(raw_pid);
                     if raw_pid != 0 {
                         debug!("ENOENT all pending fs requests...");
+                        send_fs_event
+                            .send(fs::FsEventMessage::IgnorePendingRequests)
+                            .expect("Failed to send message to filesystem threads");
                         debug!("Will kill {:?}", pid);
                         ::nix::sys::signal::kill(
                             pid,
@@ -123,7 +136,10 @@ fn main() -> Result<(), io::Error> {
                     }
                 }
                 EventMessage::Done => {
-                    info!("Waiting for the runner thread to exit...");
+                    info!("Waiting for the runner & UI threads to exit...");
+                    ui_join_handle
+                        .join()
+                        .expect("Failed to wait for the UI thread");
                     run_join_handle
                         .join()
                         .expect("Failed to wait for the runner thread");

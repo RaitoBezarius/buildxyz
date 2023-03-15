@@ -209,7 +209,7 @@ pub struct FileTree(FileNode<HashMap<ByteBuf, FileTree>>);
 ///
 /// If the entry refers to a directory, it only stores information about that
 /// directory itself. It does not contain the children of the directory.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct FileTreeEntry {
     pub path: Vec<u8>,
     pub node: FileNode<()>,
