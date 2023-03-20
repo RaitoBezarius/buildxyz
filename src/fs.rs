@@ -1,8 +1,11 @@
 use std::collections::HashMap;
 use std::fs::File;
+use std::io;
 use std::io::BufReader;
 use std::path::Path;
 use std::time::{Duration, Instant, SystemTime};
+
+use std::sync::mpsc::{channel, Receiver, Sender};
 
 // TODO: is it Linux-specific?
 use std::ffi::OsStr;
@@ -16,10 +19,18 @@ use regex::bytes::Regex;
 
 use crate::cache::database::{read_raw_buffer, Reader};
 use crate::cache::{cache_dir, FileNode, FileTreeEntry, StorePath};
+use crate::interactive::UserRequest;
 use crate::nix::{get_path_size, realize_path};
 use crate::popcount::Popcount;
 
 const UNIX_EPOCH: SystemTime = SystemTime::UNIX_EPOCH;
+
+pub enum FsEventMessage {
+    /// Flush all current pending filesystem access to ENOENT
+    IgnorePendingRequests,
+    /// A package suggestion as a reply to a user interactive search
+    PackageSuggestion(StorePath),
+}
 
 pub struct BuildXYZ {
     pub index_buffer: Vec<u8>,
@@ -31,10 +42,18 @@ pub struct BuildXYZ {
     pub nix_paths: HashMap<u64, Vec<u8>>,
     /// inode -> nix store paths
     pub last_inode: u64,
+    /// Receiver channel for commands
+    pub recv_fs_event: Receiver<FsEventMessage>,
+    /// Sender channel for UI requests
+    pub send_ui_event: Sender<UserRequest>,
 }
 
 impl Default for BuildXYZ {
     fn default() -> Self {
+        // Those are useless channels.
+        let (_send, recv) = channel();
+        let (send, _recv) = channel();
+
         BuildXYZ {
             popcount_buffer: serde_json::from_reader(BufReader::new(
                 File::open("popcount-graph.json").expect("Failed to open popcount-graph.json"),
@@ -46,6 +65,27 @@ impl Default for BuildXYZ {
             parent_prefixes: HashMap::new(),
             nix_paths: HashMap::new(),
             last_inode: 2,
+            recv_fs_event: recv,
+            send_ui_event: send,
+        }
+    }
+}
+
+fn prompt_user(prompt: String) -> bool {
+    loop {
+        let mut answer = String::new();
+        println!("{}", prompt);
+        io::stdin()
+            .read_line(&mut answer)
+            .ok()
+            .expect("Failed to read line");
+
+        print!("{}", answer.as_str());
+
+        match answer.as_str() {
+            "y" => return true,
+            "n" => return false,
+            _ => {}
         }
     }
 }
@@ -107,7 +147,7 @@ fn extract_optimal_file_attr<F>(
     candidates: &mut Vec<(StorePath, FileTreeEntry)>,
     offered_inode: u64,
     sort_key_function: F,
-) -> (fuser::FileAttr, Vec<u8>)
+) -> (&StorePath, fuser::FileAttr, Vec<u8>)
 where
     F: FnMut(&(StorePath, FileTreeEntry)) -> i32,
 {
@@ -138,7 +178,7 @@ where
             .strip_prefix("/")
             .unwrap(),
     );
-    (fattr, nix_path.as_os_str().as_bytes().to_vec())
+    (store_path, fattr, nix_path.as_os_str().as_bytes().to_vec())
 }
 
 impl BuildXYZ {
@@ -227,7 +267,7 @@ impl Filesystem for BuildXYZ {
             //     .or(Some(usize::MAX))
             // });
 
-            let (attr, nix_path) = extract_optimal_file_attr(
+            let (store_path, attr, nix_path) = extract_optimal_file_attr(
                 &mut candidates,
                 self.last_inode - 1,
                 |(store_path, _)| {
@@ -242,6 +282,25 @@ impl Filesystem for BuildXYZ {
                     pop
                 },
             );
+
+            // Ask the user if he want to provide this dependency?
+            let spath = store_path.clone();
+            self.send_ui_event
+                .send(UserRequest::InteractiveSearch(candidates.clone(), spath))
+                .expect("Failed to send UI thread a message");
+            // FIXME: timeouts?
+            match self.recv_fs_event.recv() {
+                Ok(FsEventMessage::PackageSuggestion(pkg)) => {
+                    debug!("prompt reply: {:?}", pkg);
+                }
+                Ok(FsEventMessage::IgnorePendingRequests) | _ => {
+                    debug!("ENOENT received from user");
+                    // Restore the inode
+                    self.last_inode -= 1;
+                    return reply.error(nix::errno::Errno::ENOENT as i32);
+                }
+            };
+
             trace!("{}: {:?}", String::from_utf8_lossy(&nix_path), attr);
             self.parent_prefixes.insert(
                 self.last_inode - 1,
