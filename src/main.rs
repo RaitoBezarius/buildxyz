@@ -13,10 +13,10 @@ use std::sync::Arc;
 // mod instrument;
 mod cache;
 mod fs;
+mod interactive;
 mod nix;
 mod popcount;
 mod runner;
-mod interactive;
 
 pub enum EventMessage {
     Stop,
@@ -100,7 +100,6 @@ fn main() -> Result<(), io::Error> {
             current_child_pid.clone(),
             retry.clone(),
         );
-
 
         // Main event loop
         // We wait for either stop signal or done signal

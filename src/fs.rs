@@ -45,7 +45,7 @@ pub struct BuildXYZ {
     /// Receiver channel for commands
     pub recv_fs_event: Receiver<FsEventMessage>,
     /// Sender channel for UI requests
-    pub send_ui_event: Sender<UserRequest>
+    pub send_ui_event: Sender<UserRequest>,
 }
 
 impl Default for BuildXYZ {
@@ -66,7 +66,7 @@ impl Default for BuildXYZ {
             nix_paths: HashMap::new(),
             last_inode: 2,
             recv_fs_event: recv,
-            send_ui_event: send
+            send_ui_event: send,
         }
     }
 }
@@ -285,12 +285,14 @@ impl Filesystem for BuildXYZ {
 
             // Ask the user if he want to provide this dependency?
             let spath = store_path.clone();
-            self.send_ui_event.send(UserRequest::InteractiveSearch(candidates.clone(), spath)).expect("Failed to send UI thread a message");
+            self.send_ui_event
+                .send(UserRequest::InteractiveSearch(candidates.clone(), spath))
+                .expect("Failed to send UI thread a message");
             // FIXME: timeouts?
             match self.recv_fs_event.recv() {
                 Ok(FsEventMessage::PackageSuggestion(pkg)) => {
                     debug!("prompt reply: {:?}", pkg);
-                },
+                }
                 Ok(FsEventMessage::IgnorePendingRequests) | _ => {
                     debug!("ENOENT received from user");
                     // Restore the inode
