@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs::File;
 use std::io;
 use std::io::BufReader;
@@ -35,6 +35,8 @@ pub enum FsEventMessage {
 pub struct BuildXYZ {
     pub index_buffer: Vec<u8>,
     pub popcount_buffer: Popcount,
+    /// recorded ENOENTs
+    pub recorded_enoent: HashSet<(u64, String)>,
     pub global_dirs: HashMap<String, u64>,
     /// "global path" -> inode
     pub parent_prefixes: HashMap<u64, String>,
@@ -61,6 +63,7 @@ impl Default for BuildXYZ {
             .expect("Failed to read popcount graph in JSON"),
             index_buffer: read_raw_buffer(Path::new(cache_dir()).join("files"))
                 .expect("Failed to read the index buffer"),
+            recorded_enoent: HashSet::new(),
             global_dirs: HashMap::new(),
             parent_prefixes: HashMap::new(),
             nix_paths: HashMap::new(),
@@ -214,6 +217,11 @@ impl Filesystem for BuildXYZ {
         name: &OsStr,
         reply: fuser::ReplyEntry,
     ) {
+        // Fast path: ignore recorded ENOENTs.
+        if self.recorded_enoent.contains(&(parent, name.to_string_lossy().to_string())) {
+            return reply.error(nix::errno::Errno::ENOENT as i32);
+        }
+
         // global directory
         if let Some(inode) = self.global_dirs.get(&name.to_string_lossy().to_string()) {
             if parent == 1 {
@@ -229,8 +237,7 @@ impl Filesystem for BuildXYZ {
 
         // No other global directories.
         if parent == 1 {
-            reply.error(nix::errno::Errno::ENOENT as i32);
-            return;
+            return reply.error(nix::errno::Errno::ENOENT as i32);
         }
 
         // TODO: put me behind Arc
@@ -297,6 +304,7 @@ impl Filesystem for BuildXYZ {
                     debug!("ENOENT received from user");
                     // Restore the inode
                     self.last_inode -= 1;
+                    self.recorded_enoent.insert((parent, name.to_string_lossy().to_string()));
                     return reply.error(nix::errno::Errno::ENOENT as i32);
                 }
             };
@@ -317,8 +325,9 @@ impl Filesystem for BuildXYZ {
             // This file potentially don't exist at all
             // But it is also possible we just do not have the package for it yet.
             // FIXME: provide proper heuristics for this.
-            debug!("not found");
-            reply.error(nix::errno::Errno::ENOENT as i32);
+            debug!("not found, recording this ENOENT.");
+            self.recorded_enoent.insert((parent, name.to_string_lossy().to_string()));
+            return reply.error(nix::errno::Errno::ENOENT as i32);
         }
     }
 
