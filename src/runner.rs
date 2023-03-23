@@ -6,12 +6,15 @@ use std::sync::Arc;
 use std::thread;
 use std::{collections::HashMap, sync::mpsc::Sender};
 
+use crate::EventMessage;
+
 pub fn spawn_instrumented_program(
     cmd: String,
     args: Vec<String>,
     mut env: HashMap<String, String>,
     current_child_pid: Arc<AtomicU32>,
     should_retry: Arc<AtomicBool>,
+    send_to_main: Sender<EventMessage>,
     mountpoint: &Path,
 ) -> thread::JoinHandle<()> {
     let bin_path = mountpoint.join("bin");
@@ -52,6 +55,9 @@ pub fn spawn_instrumented_program(
                 break;
             } else {
                 info!("Command ended successfully");
+                send_to_main
+                    .send(EventMessage::Done)
+                    .expect("Failed to send message to main thread");
                 break;
             }
         }

@@ -102,6 +102,7 @@ fn main() -> Result<(), io::Error> {
             std::env::vars().collect(),
             current_child_pid.clone(),
             retry.clone(),
+            send_event.clone(),
             tmpdir.path(),
         );
 
