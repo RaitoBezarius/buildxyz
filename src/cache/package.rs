@@ -9,6 +9,8 @@ use std::str;
 
 use serde::{Deserialize, Serialize};
 
+use super::FileTreeEntry;
+
 /// A type for describing how to reach a given store path.
 ///
 /// When building an index, we collect store paths from various sources, such
@@ -194,6 +196,20 @@ impl StorePath {
                     .and_then(PathOrigin::decode)
                     .and_then(|origin| StorePath::parse(origin, path))
             })
+    }
+
+    pub fn join_entry(&self, entry: FileTreeEntry) -> Cow<str> {
+        self.join(
+            Cow::Borrowed(
+                String::from_utf8_lossy(&entry.path).into_owned()
+                .strip_prefix("/")
+                .unwrap()
+            )
+        )
+    }
+
+    pub fn join(&self, entry: Cow<str>) -> Cow<str> {
+        Cow::Owned(format!("{}/{}", self.as_str(), entry))
     }
 
     /// Returns the name of the store path, which is the part of the file name that

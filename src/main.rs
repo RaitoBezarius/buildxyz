@@ -10,6 +10,8 @@ use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::mpsc::channel;
 use std::sync::Arc;
 
+use crate::resolution::{load_resolution_db, merge_resolution_db, ResolutionDB};
+
 // mod instrument;
 mod cache;
 mod fs;
@@ -17,6 +19,7 @@ mod interactive;
 mod nix;
 mod popcount;
 mod runner;
+mod resolution;
 
 pub enum EventMessage {
     Stop,
@@ -33,6 +36,10 @@ struct Args {
     cmd: String,
     #[arg(long = "db", default_value_os = cache::cache_dir())]
     database: PathBuf,
+    #[arg(long = "record-to", default_value_os = "resolution.json")]
+    resolution_record_filepath: PathBuf,
+    #[arg(long = "resolution-db", num_args = 1.., value_delimiter = ',')]
+    resolutions_db_filepath: Vec<PathBuf>,
     /// In case of failures, retry automatically the invocation
     #[arg(long = "r", default_value_t = false)]
     retry: bool,
@@ -69,12 +76,18 @@ fn main() -> Result<(), io::Error> {
 
     let tmpdir = tempfile::tempdir().expect("Failed to create a temporary directory");
 
-    // TODO: use tempdir for multiple instances
-    // let index_filename = args.database.join("files");
+    // Load all resolution databases in memory.
+    // Reduce them by merging them in the provided priority order.
+    let resolution_db = args.resolutions_db_filepath
+        .into_iter()
+        .map(|filepath| load_resolution_db(filepath))
+        .fold(ResolutionDB::new(), |left, right| merge_resolution_db(left, right));
+
     let session = spawn_mount2(
         fs::BuildXYZ {
             recv_fs_event,
             send_ui_event: send_ui_event.clone(),
+            resolution_db,
             ..Default::default()
         },
         tmpdir
