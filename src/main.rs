@@ -140,13 +140,15 @@ fn main() -> Result<(), io::Error> {
                     }
                 }
                 EventMessage::Done => {
+                    // Ensure we quit the UI thread.
+                    let _ = send_ui_event.send(interactive::UserRequest::Quit);
                     info!("Waiting for the runner & UI threads to exit...");
-                    ui_join_handle
-                        .join()
-                        .expect("Failed to wait for the UI thread");
                     run_join_handle
                         .join()
                         .expect("Failed to wait for the runner thread");
+                    ui_join_handle
+                        .join()
+                        .expect("Failed to wait for the UI thread");
                     info!("Unmounting the filesystem...");
                     session.join();
                     break;
