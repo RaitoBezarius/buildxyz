@@ -295,7 +295,8 @@ impl Filesystem for BuildXYZ {
     ) -> Result<(), i32> {
         self.parent_prefixes.insert(0, "".to_string());
         // Create bin, lib, include, pkg-config inodes
-        for fhs_dir in ["bin", "lib", "include", "pkgconfig"] {
+        // TODO: Keep this list synchronized with created search paths in runner.rs?
+        for fhs_dir in ["bin", "lib", "include", "pkgconfig", "perl", "aclocal", "cmake"] {
             let inode = self.allocate_inode();
             self.parent_prefixes.insert(inode, fhs_dir.to_string());
             self.global_dirs.insert(fhs_dir.to_string(), inode);
