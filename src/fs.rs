@@ -367,7 +367,7 @@ impl Filesystem for BuildXYZ {
         if let Some(data) = path_provide_data {
             let nix_path = data
                 .store_path
-                .join(&data.file_entry_name.into())
+                .join(data.file_entry_name.clone().into())
                 .into_owned()
                 .as_str()
                 .as_bytes()
