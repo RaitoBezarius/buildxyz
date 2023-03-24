@@ -5,14 +5,14 @@ use crate::cache::StorePath;
 /// Resolution is data that enable the tool to automate a situation where
 /// a manual decision has to be taken.
 
-#[derive(Clone, Eq, Hash, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Eq, Hash, PartialEq, Serialize, Deserialize, Debug)]
 pub struct ProvideData {
     pub kind: fuser::FileType,
     pub file_entry_name: String,
     pub store_path: StorePath,
 }
 
-#[derive(Serialize, Deserialize, Eq, Hash, PartialEq, Clone)]
+#[derive(Serialize, Deserialize, Eq, Hash, PartialEq, Clone, Debug)]
 #[serde(tag = "decision_type")]
 pub enum Decision {
     /// Provide this store path

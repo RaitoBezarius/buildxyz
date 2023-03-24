@@ -215,6 +215,7 @@ impl BuildXYZ {
             .build_in_construction_path(parent, name)
             .to_string_lossy()
             .to_string();
+        trace!("Recording {} for {:?}", current_path, decision);
         self.resolution_db.insert(
             current_path.clone(),
             Resolution::ConstantResolution(crate::resolution::ResolutionData {
@@ -365,6 +366,7 @@ impl Filesystem for BuildXYZ {
         };
 
         if let Some(data) = path_provide_data {
+            trace!("FAST PATH - Decision already exist in current database");
             let nix_path = data
                 .store_path
                 .join(data.file_entry_name.clone().into())
