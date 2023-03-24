@@ -13,7 +13,7 @@ use std::ffi::OsStr;
 
 use fuser::{FileAttr, FileType, Filesystem};
 
-use log::{debug, info, trace};
+use log::{debug, info, trace, warn};
 
 use regex::bytes::Regex;
 
@@ -422,7 +422,7 @@ impl Filesystem for BuildXYZ {
                             store_path: pkg,
                         }),
                     );
-                    self.serve_path(nix_path, target_path, ft_attribute, reply);
+                    return self.serve_path(nix_path, target_path, ft_attribute, reply);
                 }
                 Ok(FsEventMessage::IgnorePendingRequests) | _ => {
                     debug!("ENOENT received from user");
@@ -448,11 +448,16 @@ impl Filesystem for BuildXYZ {
             // Ensure the path is realized, it could have been gc'd between the lookup and the
             // readlink.
             if realize_path(String::from_utf8_lossy(&nix_path).into()).is_err() {
+                warn!(
+                    "Failed to realize {} during readlink, it was supposed to be realizable!",
+                    String::from_utf8_lossy(&nix_path)
+                );
                 reply.error(nix::errno::Errno::ENOENT as i32);
             } else {
                 reply.data(nix_path);
             }
         } else {
+            warn!("Attempt to read a non-existent Nix path, ino={}", ino);
             reply.error(nix::errno::Errno::ENOENT as i32);
         }
     }
