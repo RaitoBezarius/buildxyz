@@ -8,8 +8,8 @@ use std::time::{Duration, Instant, SystemTime};
 use std::sync::mpsc::{channel, Receiver, Sender};
 
 // TODO: is it Linux-specific?
-use std::ffi::OsStr;
 use std::cell::RefCell;
+use std::ffi::OsStr;
 
 use fuser::{FileAttr, FileType, Filesystem};
 
@@ -24,7 +24,7 @@ use crate::nix::{get_path_size, realize_path};
 use crate::popcount::Popcount;
 
 use crate::read_raw_buffer;
-use crate::resolution::{Decision, Resolution, ResolutionDB, ProvideData};
+use crate::resolution::{Decision, ProvideData, Resolution, ResolutionDB};
 
 const UNIX_EPOCH: SystemTime = SystemTime::UNIX_EPOCH;
 
@@ -211,51 +211,55 @@ impl BuildXYZ {
     }
 
     fn record_resolution(&mut self, parent: u64, name: &OsStr, decision: Decision) {
-        let current_path = self.build_in_construction_path(parent, name).to_string_lossy().to_string();
-        self.resolution_db.insert(current_path.clone(),
+        let current_path = self
+            .build_in_construction_path(parent, name)
+            .to_string_lossy()
+            .to_string();
+        self.resolution_db.insert(
+            current_path.clone(),
             Resolution::ConstantResolution(crate::resolution::ResolutionData {
-            requested_path: current_path,
-            decision
-        }));
+                requested_path: current_path,
+                decision,
+            }),
+        );
     }
 
     fn get_resolution(&self, parent: u64, name: &OsStr) -> Option<&Resolution> {
-        let current_path = self.build_in_construction_path(parent, name).to_string_lossy().to_string();
+        let current_path = self
+            .build_in_construction_path(parent, name)
+            .to_string_lossy()
+            .to_string();
         self.resolution_db.get(&current_path)
     }
 
     fn get_decision(&self, parent: u64, name: &OsStr) -> Option<&Decision> {
         match self.get_resolution(parent, name) {
             Some(Resolution::ConstantResolution(data)) => Some(&data.decision),
-            _ => None
+            _ => None,
         }
     }
 
     /// Serve the path as an answer to the filesystem
     /// It realizes the Nix path if it's not already.
-    fn serve_path(&mut self,
+    fn serve_path(
+        &mut self,
         nix_path: Vec<u8>,
         requested_path: PathBuf,
         attribute: fuser::FileAttr,
-        reply: fuser::ReplyEntry) {
+        reply: fuser::ReplyEntry,
+    ) {
         let nix_path_as_str = String::from_utf8_lossy(&nix_path);
         let inode = 0;
         trace!("{}: {:?}", nix_path_as_str, attribute);
-        self.parent_prefixes.insert(
-            inode,
-            requested_path.to_string_lossy().to_string()
-        );
+        self.parent_prefixes
+            .insert(inode, requested_path.to_string_lossy().to_string());
 
         realize_path(nix_path_as_str.into())
             .expect("Nix path should be realized, database seems incoherent with Nix store.");
 
         self.nix_paths.insert(inode, nix_path);
 
-        reply.entry(
-            &Duration::from_secs(60 * 20),
-            &attribute,
-            attribute.ino
-        );
+        reply.entry(&Duration::from_secs(60 * 20), &attribute, attribute.ino);
     }
 
     /// Runs a query using our index
@@ -295,16 +299,27 @@ impl Filesystem for BuildXYZ {
             self.parent_prefixes.insert(inode, fhs_dir.to_string());
             self.global_dirs.insert(fhs_dir.to_string(), inode);
         }
-        info!("Loaded {} resolutions from the database.", self.resolution_db.len());
+        info!(
+            "Loaded {} resolutions from the database.",
+            self.resolution_db.len()
+        );
         Ok(())
     }
 
     fn destroy(&mut self) {
-        debug!("Writing {} resolutions on disk...", self.resolution_db.len());
+        debug!(
+            "Writing {} resolutions on disk...",
+            self.resolution_db.len()
+        );
         // Write this resolution on disk.
-        std::fs::write("resolution.json",
-            serde_json::to_string(&Vec::from_iter(std::mem::take(&mut self.resolution_db).values())).expect("Failed to serialize resolution data")
-        ).expect("Failed to write resolution data");
+        std::fs::write(
+            "resolution.json",
+            serde_json::to_string(&Vec::from_iter(
+                std::mem::take(&mut self.resolution_db).values(),
+            ))
+            .expect("Failed to serialize resolution data"),
+        )
+        .expect("Failed to write resolution data");
     }
 
     fn lookup(
@@ -333,7 +348,10 @@ impl Filesystem for BuildXYZ {
         }
 
         // Fast path: ignore temporarily recorded ENOENTs.
-        if self.recorded_enoent.contains(&(parent, name.to_string_lossy().to_string())) {
+        if self
+            .recorded_enoent
+            .contains(&(parent, name.to_string_lossy().to_string()))
+        {
             return reply.error(nix::errno::Errno::ENOENT as i32);
         }
 
@@ -361,9 +379,8 @@ impl Filesystem for BuildXYZ {
         let mut candidates = self.search_in_index(&target_path);
 
         if !candidates.is_empty() {
-            let (store_path, ft_entry) = extract_optimal_path(
-                &mut candidates,
-                |(store_path, _)| {
+            let (store_path, ft_entry) =
+                extract_optimal_path(&mut candidates, |(store_path, _)| {
                     trace!("extracting pop for {}", store_path.as_str());
                     // Highest popularity comes first, so inverted popularity works here.
                     let pop = -(*self
@@ -378,7 +395,12 @@ impl Filesystem for BuildXYZ {
             // Ask the user if he want to provide this dependency?
             let mut ft_attribute: fuser::FileAttr = ft_entry.node.clone().into();
             let file_entry_name = String::from_utf8_lossy(&ft_entry.path).to_string();
-            let nix_path = store_path.join_entry(ft_entry.clone()).into_owned().as_str().as_bytes().to_vec();
+            let nix_path = store_path
+                .join_entry(ft_entry.clone())
+                .into_owned()
+                .as_str()
+                .as_bytes()
+                .to_vec();
             let spath = store_path.clone();
             self.send_ui_event
                 .send(UserRequest::InteractiveSearch(candidates.clone(), spath))
@@ -397,13 +419,8 @@ impl Filesystem for BuildXYZ {
                         Decision::Provide(ProvideData {
                             file_entry_name,
                             kind: ft_attribute.kind,
-                            store_path: pkg
-                        }));
-                    self.serve_path(
-                        nix_path,
-                        target_path,
-                        ft_attribute,
-                        reply
+                            store_path: pkg,
+                        }),
                     );
                     self.serve_path(nix_path, target_path, ft_attribute, reply);
                 }
@@ -420,7 +437,8 @@ impl Filesystem for BuildXYZ {
             // But it is also possible we just do not have the package for it yet.
             // FIXME: provide proper heuristics for this.
             debug!("not found in database, recording this ENOENT.");
-            self.recorded_enoent.insert((parent, name.to_string_lossy().to_string()));
+            self.recorded_enoent
+                .insert((parent, name.to_string_lossy().to_string()));
             return reply.error(nix::errno::Errno::ENOENT as i32);
         }
     }

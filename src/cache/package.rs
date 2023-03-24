@@ -199,13 +199,12 @@ impl StorePath {
     }
 
     pub fn join_entry(&self, entry: FileTreeEntry) -> Cow<str> {
-        self.join(
-            Cow::Borrowed(
-                String::from_utf8_lossy(&entry.path).into_owned()
+        self.join(Cow::Borrowed(
+            String::from_utf8_lossy(&entry.path)
+                .into_owned()
                 .strip_prefix("/")
-                .unwrap()
-            )
-        )
+                .unwrap(),
+        ))
     }
 
     pub fn join(&self, entry: Cow<str>) -> Cow<str> {

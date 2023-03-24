@@ -18,8 +18,8 @@ mod fs;
 mod interactive;
 mod nix;
 mod popcount;
-mod runner;
 mod resolution;
+mod runner;
 
 pub enum EventMessage {
     Stop,
@@ -78,10 +78,13 @@ fn main() -> Result<(), io::Error> {
 
     // Load all resolution databases in memory.
     // Reduce them by merging them in the provided priority order.
-    let resolution_db = args.resolutions_db_filepath
+    let resolution_db = args
+        .resolutions_db_filepath
         .into_iter()
         .map(|filepath| load_resolution_db(filepath))
-        .fold(ResolutionDB::new(), |left, right| merge_resolution_db(left, right));
+        .fold(ResolutionDB::new(), |left, right| {
+            merge_resolution_db(left, right)
+        });
 
     let session = spawn_mount2(
         fs::BuildXYZ {
