@@ -274,7 +274,7 @@ impl BuildXYZ {
         let db = Reader::from_buffer(self.index_buffer.clone()).expect("Failed to open database");
 
         let candidates: Vec<(StorePath, FileTreeEntry)> = db
-            .query(&Regex::new(format!(r"{}$", escaped_path).as_str()).unwrap())
+            .query(&Regex::new(format!(r"^/{}$", escaped_path).as_str()).unwrap())
             .run()
             .expect("Failed to query the database")
             .into_iter()
