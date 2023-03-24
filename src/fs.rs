@@ -17,7 +17,7 @@ use log::{debug, info, trace};
 
 use regex::bytes::Regex;
 
-use crate::cache::database::{read_raw_buffer, Reader};
+use crate::cache::database::{read_from_path, Reader};
 use crate::cache::{cache_dir, FileNode, FileTreeEntry, StorePath};
 use crate::interactive::UserRequest;
 use crate::nix::{get_path_size, realize_path};
@@ -57,11 +57,9 @@ impl Default for BuildXYZ {
         let (send, _recv) = channel();
 
         BuildXYZ {
-            popcount_buffer: serde_json::from_reader(BufReader::new(
-                File::open("popcount-graph.json").expect("Failed to open popcount-graph.json"),
-            ))
-            .expect("Failed to read popcount graph in JSON"),
-            index_buffer: read_raw_buffer(Path::new(cache_dir()).join("files"))
+            popcount_buffer: serde_json::from_slice(include_bytes!("../popcount-graph.json"))
+                .expect("Failed to deserialize the popcount graph"),
+            index_buffer: read_from_path(Path::new(cache_dir()).join("files"))
                 .expect("Failed to read the index buffer"),
             recorded_enoent: HashSet::new(),
             global_dirs: HashMap::new(),
@@ -218,7 +216,10 @@ impl Filesystem for BuildXYZ {
         reply: fuser::ReplyEntry,
     ) {
         // Fast path: ignore recorded ENOENTs.
-        if self.recorded_enoent.contains(&(parent, name.to_string_lossy().to_string())) {
+        if self
+            .recorded_enoent
+            .contains(&(parent, name.to_string_lossy().to_string()))
+        {
             return reply.error(nix::errno::Errno::ENOENT as i32);
         }
 
@@ -304,7 +305,8 @@ impl Filesystem for BuildXYZ {
                     debug!("ENOENT received from user");
                     // Restore the inode
                     self.last_inode -= 1;
-                    self.recorded_enoent.insert((parent, name.to_string_lossy().to_string()));
+                    self.recorded_enoent
+                        .insert((parent, name.to_string_lossy().to_string()));
                     return reply.error(nix::errno::Errno::ENOENT as i32);
                 }
             };
@@ -326,7 +328,8 @@ impl Filesystem for BuildXYZ {
             // But it is also possible we just do not have the package for it yet.
             // FIXME: provide proper heuristics for this.
             debug!("not found, recording this ENOENT.");
-            self.recorded_enoent.insert((parent, name.to_string_lossy().to_string()));
+            self.recorded_enoent
+                .insert((parent, name.to_string_lossy().to_string()));
             return reply.error(nix::errno::Errno::ENOENT as i32);
         }
     }

@@ -15,10 +15,12 @@ error_chain! {
 
 /// Ask the store to realize the provided path.
 pub fn realize_path(path: String) -> Result<()> {
+    let nixpkgs_path = env!("BUILDXYZ_NIXPKGS");
     // TODO: send back this information to the meta-panel of the TUI
     let output = Command::new("nix-store")
         .arg("--realize")
         .arg(path)
+        .env("NIX_PATH", format!("nixpkgs={}", nixpkgs_path))
         .stdin(Stdio::null())
         .output()
         .expect("Failed to realize store based on nix-store --realize");

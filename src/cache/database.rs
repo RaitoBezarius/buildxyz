@@ -143,21 +143,24 @@ pub struct Reader {
     decoder: frcode::Decoder<Cursor<Vec<u8>>>, // BufReader<zstd::Decoder<'static, BufReader<File>>>>,
 }
 
-pub fn read_raw_buffer<P: AsRef<Path>>(path: P) -> Result<Vec<u8>> {
-    let mut file = File::open(path)?;
+pub fn read_from_path<P: AsRef<Path>>(path: P) -> Result<Vec<u8>> {
+    read_raw_buffer(File::open(path)?)
+}
+
+pub fn read_raw_buffer<Reader: std::io::Read>(mut reader: Reader) -> Result<Vec<u8>> {
     let mut magic = [0u8; 4];
-    file.read_exact(&mut magic)?;
+    reader.read_exact(&mut magic)?;
 
     if magic != FILE_MAGIC {
         return Err(ErrorKind::UnsupportedFileType(magic.to_vec()).into());
     }
 
-    let version = file.read_u64::<LittleEndian>()?;
+    let version = reader.read_u64::<LittleEndian>()?;
     if version != FORMAT_VERSION {
         return Err(ErrorKind::UnsupportedVersion(version).into());
     }
 
-    let mut decoder = zstd::Decoder::new(file)?;
+    let mut decoder = zstd::Decoder::new(reader)?;
     let mut buffer: Vec<u8> = Vec::new();
     decoder.read_to_end(&mut buffer)?;
 
@@ -169,7 +172,7 @@ impl Reader {
     ///
     /// If the path does not exist or is not a valid database, an error is returned.
     pub fn open<P: AsRef<Path>>(path: P) -> Result<Reader> {
-        Reader::from_buffer(read_raw_buffer(path)?)
+        Reader::from_buffer(read_from_path(path)?)
     }
 
     pub fn from_buffer(buffer: Vec<u8>) -> Result<Reader> {

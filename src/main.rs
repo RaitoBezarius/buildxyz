@@ -68,11 +68,13 @@ fn main() -> Result<(), io::Error> {
     info!("Mounting the FUSE filesystem in the background...");
 
     // TODO: use tempdir for multiple instances
-    let index_filename = args.database.join("files");
-    let index_buffer = read_raw_buffer(index_filename).expect("Failed to read the index buffer!");
+    // let index_filename = args.database.join("files");
     let session = spawn_mount2(
         fs::BuildXYZ {
-            index_buffer,
+            index_buffer: read_raw_buffer(std::io::Cursor::new(include_bytes!(
+                "../nix-index-files"
+            )))
+            .expect("Failed to read the index database from memory"),
             recv_fs_event,
             send_ui_event: send_ui_event.clone(),
             ..Default::default()
