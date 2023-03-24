@@ -263,16 +263,17 @@ impl BuildXYZ {
 
     /// Runs a query using our index
     fn search_in_index(&self, requested_path: &PathBuf) -> Vec<(StorePath, FileTreeEntry)> {
+        let escaped_path = regex::escape(&requested_path.to_string_lossy());
         debug!(
-            "looking for: {}$ in Nix database",
-            requested_path.to_string_lossy()
+            "looking for: `{}$` in Nix database",
+            requested_path.to_string_lossy(),
         );
         let now = Instant::now();
         // TODO: put me behind Arc
         let db = Reader::from_buffer(self.index_buffer.clone()).expect("Failed to open database");
 
         let candidates: Vec<(StorePath, FileTreeEntry)> = db
-            .query(&Regex::new(format!(r"{}$", requested_path.to_string_lossy()).as_str()).unwrap())
+            .query(&Regex::new(format!(r"{}$", escaped_path).as_str()).unwrap())
             .run()
             .expect("Failed to query the database")
             .into_iter()
