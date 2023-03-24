@@ -22,6 +22,7 @@ use crate::cache::{cache_dir, FileNode, FileTreeEntry, StorePath};
 use crate::interactive::UserRequest;
 use crate::nix::{get_path_size, realize_path};
 use crate::popcount::Popcount;
+use crate::read_raw_buffer;
 
 const UNIX_EPOCH: SystemTime = SystemTime::UNIX_EPOCH;
 
@@ -59,8 +60,10 @@ impl Default for BuildXYZ {
         BuildXYZ {
             popcount_buffer: serde_json::from_slice(include_bytes!("../popcount-graph.json"))
                 .expect("Failed to deserialize the popcount graph"),
-            index_buffer: read_from_path(Path::new(cache_dir()).join("files"))
-                .expect("Failed to read the index buffer"),
+            index_buffer: read_raw_buffer(std::io::Cursor::new(include_bytes!(
+                "../nix-index-files"
+            )))
+            .expect("Failed to deserialize the index buffer"),
             recorded_enoent: HashSet::new(),
             global_dirs: HashMap::new(),
             parent_prefixes: HashMap::new(),
