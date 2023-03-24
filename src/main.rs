@@ -67,6 +67,8 @@ fn main() -> Result<(), io::Error> {
 
     info!("Mounting the FUSE filesystem in the background...");
 
+    let tmpdir = tempfile::tempdir().expect("Failed to create a temporary directory");
+
     // TODO: use tempdir for multiple instances
     // let index_filename = args.database.join("files");
     let session = spawn_mount2(
@@ -79,7 +81,10 @@ fn main() -> Result<(), io::Error> {
             send_ui_event: send_ui_event.clone(),
             ..Default::default()
         },
-        "/tmp/buildxyz",
+        tmpdir
+            .path()
+            .to_str()
+            .expect("Failed to convert the path to a string"),
         &[],
     )
     .expect("Error spawning the FUSE filesystem in the background");
@@ -101,6 +106,7 @@ fn main() -> Result<(), io::Error> {
             std::env::vars().collect(),
             current_child_pid.clone(),
             retry.clone(),
+            tmpdir.path(),
         );
 
         // Main event loop

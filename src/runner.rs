@@ -1,4 +1,5 @@
 use log::{debug, error, info};
+use std::path::Path;
 use std::process::Command;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::Arc;
@@ -11,13 +12,24 @@ pub fn spawn_instrumented_program(
     mut env: HashMap<String, String>,
     current_child_pid: Arc<AtomicU32>,
     should_retry: Arc<AtomicBool>,
+    mountpoint: &Path,
 ) -> thread::JoinHandle<()> {
+    let bin_path = mountpoint.join("bin");
+    let pkgconfig_path = mountpoint.join("pkgconfig");
     env.entry("PATH".to_string()).and_modify(|env_path| {
-        *env_path = format!("{env_path}:/tmp/buildxyz/bin");
+        *env_path = format!(
+            "{env_path}:{bin_path}",
+            env_path = env_path,
+            bin_path = bin_path.display()
+        );
     });
     env.entry("PKG_CONFIG_PATH".to_string())
         .and_modify(|env_path| {
-            *env_path = format!("{env_path}:/tmp/buildxyz/pkgconfig");
+            *env_path = format!(
+                "{env_path}:{pkgconfig_path}",
+                env_path = env_path,
+                pkgconfig_path = pkgconfig_path.display()
+            );
         });
     thread::spawn(move || {
         loop {
