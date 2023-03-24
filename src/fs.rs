@@ -249,15 +249,14 @@ impl BuildXYZ {
         reply: fuser::ReplyEntry,
     ) {
         let nix_path_as_str = String::from_utf8_lossy(&nix_path);
-        let inode = 0;
         trace!("{}: {:?}", nix_path_as_str, attribute);
         self.parent_prefixes
-            .insert(inode, requested_path.to_string_lossy().to_string());
+            .insert(attribute.ino, requested_path.to_string_lossy().to_string());
 
         realize_path(nix_path_as_str.into())
             .expect("Nix path should be realized, database seems incoherent with Nix store.");
 
-        self.nix_paths.insert(inode, nix_path);
+        self.nix_paths.insert(attribute.ino, nix_path);
 
         reply.entry(&Duration::from_secs(60 * 20), &attribute, attribute.ino);
     }
