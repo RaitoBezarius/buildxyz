@@ -32,8 +32,8 @@ rustPlatform.buildRustPackage
       install -D ${./Cargo.toml} $out/Cargo.toml
       install -D ${./Cargo.lock} $out/Cargo.lock
       cp -r ${./src} $out/src
-      ln -s ${popcount-graph} $out/popcount-graph.json
-      ln -s ${nix-index-db} $out/nix-index-files
+      ln -sf ${popcount-graph} $out/popcount-graph.json
+      ln -sf ${nix-index-db} $out/nix-index-files
     '';
     # Use provided zstd rather than vendored one.
     ZSTD_SYS_USE_PKG_CONFIG = true;
