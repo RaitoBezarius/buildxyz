@@ -10,7 +10,12 @@ use crate::EventMessage;
 
 fn append_search_path(env: &mut HashMap<String, String>, key: &str, value: PathBuf) {
     env.entry(key.to_string()).and_modify(|env_path| {
-        *env_path = format!("{env_path}:{value}", env_path = env_path, value = value.display());
+        debug!("old env: {}={}", key, env_path);
+        *env_path = format!(
+            "{env_path}:{value}",
+            env_path = env_path,
+            value = value.display()
+        );
     });
 }
 
@@ -24,7 +29,7 @@ pub fn spawn_instrumented_program(
     mountpoint: &Path,
 ) -> thread::JoinHandle<()> {
     let bin_path = mountpoint.join("bin");
-    let pkgconfig_path = mountpoint.join("pkgconfig");
+    let pkgconfig_path = mountpoint.join("lib").join("pkgconfig");
     let library_path = mountpoint.join("lib");
     let include_path = mountpoint.join("include");
     let cmake_path = mountpoint.join("cmake");
@@ -39,14 +44,14 @@ pub fn spawn_instrumented_program(
     append_search_path(&mut env, "CMAKE_INCLUDE_PATH", cmake_path);
     append_search_path(&mut env, "ACLOCAL_PATH", aclocal_path);
 
-    append_search_path(&mut env, "LD_LIBRARY_PATH", library_path.clone());
+    //append_search_path(&mut env, "LD_LIBRARY_PATH", library_path.clone());
 
-    env.entry("NIX_LDFLAGS".to_string()).and_modify(|env_path| {
-        *env_path = format!("{env_path} -L{library_path}", env_path=env_path, library_path=library_path.display());
-    });
-    env.entry("NIX_CFLAGS_COMPILE".to_string()).and_modify(|env_path| {
-        *env_path = format!("{env_path} -isystem {include_path}", env_path=env_path, include_path=include_path.display());
-    });
+    //env.entry("NIX_LDFLAGS".to_string()).and_modify(|env_path| {
+    //    *env_path = format!("{env_path} -L{library_path}", env_path=env_path, library_path=library_path.display());
+    //});
+    //env.entry("NIX_CFLAGS_COMPILE".to_string()).and_modify(|env_path| {
+    //    *env_path = format!("{env_path} -isystem {include_path}", env_path=env_path, include_path=include_path.display());
+    //});
 
     thread::spawn(move || {
         loop {
