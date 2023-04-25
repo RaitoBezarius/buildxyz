@@ -36,13 +36,52 @@ struct Args {
     cmd: String,
     #[arg(long = "db", default_value_os = cache::cache_dir())]
     database: PathBuf,
-    #[arg(long = "record-to", default_value_os = "resolution.json")]
-    resolution_record_filepath: PathBuf,
-    #[arg(long = "resolution-db", num_args = 1.., value_delimiter = ',')]
-    resolutions_db_filepath: Vec<PathBuf>,
+    #[arg(long = "record-to")]
+    resolution_record_filepath: Option<PathBuf>,
     /// In case of failures, retry automatically the invocation
     #[arg(long = "r", default_value_t = false)]
     retry: bool,
+}
+
+fn get_git_root() -> Option<std::path::PathBuf> {
+    // TODO: `git` is not necessarily in the PATH, is it?
+    let output = Command::new("git")
+        .args(vec!["rev-parse", "--show-toplevel"])
+        .output()
+        .expect("Failed to run git");
+
+    if output.status.success() {
+        Some(
+            std::ffi::OsString::from_vec(output.stdout)
+                .as_os_str()
+                .into(),
+        )
+    } else {
+        None
+    }
+}
+
+lazy_static! {
+    /// Here are the default search paths by order:
+    ///   $XDG_DATA_DIR/buildxyz
+    ///   "Git root"/.buildxyz if it exist.
+    ///   Current working directory
+    static ref DEFAULT_RESOLUTION_PATHS: Vec<PathBuf> = {
+        let mut paths = Vec::new();
+        let xdg_base_dir = xdg::BaseDirectories::with_prefix("buildxyz").unwrap();
+        paths.push(
+            xdg_base_dir.get_data_home()
+        );
+        if let Some(git_root) = get_git_root() {
+            paths.push(
+                git_root.join(".buildxyz")
+            )
+        }
+        paths.push(
+            std::env::current_dir().expect("Failed to get current working directory")
+        );
+        paths
+    };
 }
 
 fn main() -> Result<(), io::Error> {
@@ -78,10 +117,15 @@ fn main() -> Result<(), io::Error> {
 
     // Load all resolution databases in memory.
     // Reduce them by merging them in the provided priority order.
-    let resolution_db = args
-        .resolutions_db_filepath
+    let resolution_db = std::env::var("BUILDXYZ_RESOLUTION_PATH")
+        .unwrap_or(String::new())
+        .split(":")
         .into_iter()
-        .map(|filepath| load_resolution_db(filepath))
+        .map(PathBuf::from)
+        // Default resolution paths are lowest priority.
+        .chain(DEFAULT_RESOLUTION_PATHS.iter().cloned())
+        .map(|searchpath| load_resolution_db(searchpath))
+        .flatten() // Filter out all Nones.
         .fold(ResolutionDB::new(), |left, right| {
             merge_resolution_db(left, right)
         });
@@ -90,6 +134,7 @@ fn main() -> Result<(), io::Error> {
         fs::BuildXYZ {
             recv_fs_event,
             send_ui_event: send_ui_event.clone(),
+            resolution_record_filepath: args.resolution_record_filepath,
             resolution_db,
             ..Default::default()
         },

@@ -45,14 +45,23 @@ pub struct ResolutionData {
 // TODO: BTreeMap provide O(log n) search, do we need better?
 pub type ResolutionDB = BTreeMap<String, Resolution>;
 
-pub fn load_resolution_db(filename: PathBuf) -> ResolutionDB {
-    serde_json::from_slice::<Vec<Resolution>>(
-        &fs::read(filename).expect("Failed to read resolution DB"),
-    )
-    .expect("Failed to load resolution DB")
-    .into_iter()
-    .map(|resolution| (resolution.requested_path().clone(), resolution))
-    .collect()
+fn locate_resolution_db(search_path: PathBuf) -> Option<PathBuf> {
+    None
+}
+
+/// Search in the provided path for a resolution database.
+pub fn load_resolution_db(search_path: PathBuf) -> Option<ResolutionDB> {
+    locate_resolution_db(search_path).and_then(|filename| {
+        Some(
+            serde_json::from_slice::<Vec<Resolution>>(
+                &fs::read(filename).expect("Failed to read resolution DB"),
+            )
+            .expect("Failed to load resolution DB")
+            .into_iter()
+            .map(|resolution| (resolution.requested_path().clone(), resolution))
+            .collect(),
+        )
+    })
 }
 
 /// Unify two set of resolutions, right taking priority over left.

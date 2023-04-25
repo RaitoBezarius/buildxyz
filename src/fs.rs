@@ -40,6 +40,8 @@ pub struct BuildXYZ {
     pub popcount_buffer: Popcount,
     /// resolution information for this instance
     pub resolution_db: ResolutionDB,
+    /// where to write this instance resolutions
+    pub resolution_record_filepath: Option<PathBuf>,
     /// recorded ENOENTs
     pub recorded_enoent: HashSet<(u64, String)>,
     pub global_dirs: HashMap<String, u64>,
@@ -69,6 +71,7 @@ impl Default for BuildXYZ {
             )))
             .expect("Failed to deserialize the index buffer"),
             resolution_db: Default::default(),
+            resolution_record_filepath: Default::default(),
             recorded_enoent: HashSet::new(),
             global_dirs: HashMap::new(),
             parent_prefixes: HashMap::new(),
@@ -309,19 +312,21 @@ impl Filesystem for BuildXYZ {
     }
 
     fn destroy(&mut self) {
-        debug!(
-            "Writing {} resolutions on disk...",
-            self.resolution_db.len()
-        );
-        // Write this resolution on disk.
-        std::fs::write(
-            "resolution.json",
-            serde_json::to_string(&Vec::from_iter(
-                std::mem::take(&mut self.resolution_db).values(),
-            ))
-            .expect("Failed to serialize resolution data"),
-        )
-        .expect("Failed to write resolution data");
+        if let Some(filepath) = &self.resolution_record_filepath {
+            debug!(
+                "Writing {} resolutions on disk...",
+                self.resolution_db.len()
+            );
+            // Write this resolution on disk.
+            std::fs::write(
+                filepath,
+                serde_json::to_string(&Vec::from_iter(
+                    std::mem::take(&mut self.resolution_db).values(),
+                ))
+                .expect("Failed to serialize resolution data"),
+            )
+            .expect("Failed to write resolution data");
+        }
     }
 
     fn lookup(
