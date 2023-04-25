@@ -282,6 +282,8 @@ impl BuildXYZ {
             .expect("Failed to query the database")
             .into_iter()
             .map(|result| result.expect("Failed to obtain candidate"))
+            .filter(|(spath, _)| spath.origin().toplevel) // It must be a top-level path, otherwise
+            // it is propagated, so not to consider.
             .collect();
         trace!("{:?}", candidates);
         debug!("search took {:.2?}", now.elapsed());
