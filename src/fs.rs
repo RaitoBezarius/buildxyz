@@ -290,6 +290,14 @@ impl BuildXYZ {
 
         candidates
     }
+
+    /// Register known "FHS" structure
+    /// Assume parents are already created.
+    fn mkdir_fhs_directory(&mut self, path: &str) {
+        let inode = self.allocate_inode();
+        self.parent_prefixes.insert(inode, path.to_string());
+        self.global_dirs.insert(path.to_string(), inode);
+    }
 }
 
 impl Filesystem for BuildXYZ {
@@ -298,14 +306,20 @@ impl Filesystem for BuildXYZ {
         _req: &fuser::Request<'_>,
         _config: &mut fuser::KernelConfig,
     ) -> Result<(), i32> {
-        self.parent_prefixes.insert(0, "".to_string());
+        self.parent_prefixes.insert(1, "".to_string());
         // Create bin, lib, include, pkg-config inodes
         // TODO: Keep this list synchronized with created search paths in runner.rs?
-        for fhs_dir in ["bin", "lib", "include", "pkgconfig", "perl", "aclocal", "cmake"] {
-            let inode = self.allocate_inode();
-            self.parent_prefixes.insert(inode, fhs_dir.to_string());
-            self.global_dirs.insert(fhs_dir.to_string(), inode);
-        }
+        [
+            "bin",
+            "include",
+            "perl",
+            "aclocal",
+            "cmake",
+            "lib",
+            "lib/pkgconfig",
+        ]
+        .into_iter()
+        .for_each(|c| self.mkdir_fhs_directory(c));
         info!(
             "Loaded {} resolutions from the database.",
             self.resolution_db.len()
@@ -338,17 +352,23 @@ impl Filesystem for BuildXYZ {
         name: &OsStr,
         reply: fuser::ReplyEntry,
     ) {
+        let target_path = self.build_in_construction_path(parent, name);
+
         // global directory
-        if let Some(inode) = self.global_dirs.get(&name.to_string_lossy().to_string()) {
-            if parent == 1 {
-                trace!("global directory hit: {}", name.to_string_lossy());
-                reply.entry(
-                    &Duration::from_secs(60 * 60),
-                    &build_fake_fattr(*inode, FileType::Directory),
-                    *inode,
-                );
-                return;
-            }
+        if let Some(inode) = self
+            .global_dirs
+            .get(&target_path.to_string_lossy().to_string())
+        {
+            trace!(
+                "global directory hit: {}",
+                &target_path.to_string_lossy().to_string()
+            );
+            reply.entry(
+                &Duration::from_secs(60 * 60),
+                &build_fake_fattr(*inode, FileType::Directory),
+                *inode,
+            );
+            return;
         }
 
         // No other global directories.
@@ -364,7 +384,6 @@ impl Filesystem for BuildXYZ {
             return reply.error(nix::errno::Errno::ENOENT as i32);
         }
 
-        let target_path = self.build_in_construction_path(parent, name);
 
         // Fast path: general resolutions
         let path_provide_data: Option<&ProvideData> = match self.get_decision(parent, name) {
@@ -391,7 +410,11 @@ impl Filesystem for BuildXYZ {
         if !candidates.is_empty() {
             let (store_path, ft_entry) =
                 extract_optimal_path(&mut candidates, |(store_path, _)| {
-                    trace!("extracting pop for {}", store_path.as_str());
+                    trace!(
+                        "extracting pop for {}: {}",
+                        store_path.as_str(),
+                        store_path.origin().attr
+                    );
                     // Highest popularity comes first, so inverted popularity works here.
                     let pop = -(*self
                         .popcount_buffer
