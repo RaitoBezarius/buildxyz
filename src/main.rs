@@ -14,7 +14,9 @@ use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::mpsc::channel;
 use std::sync::Arc;
 
-use crate::resolution::{load_resolution_db, merge_resolution_db, ResolutionDB};
+use crate::resolution::{
+    load_resolution_db, merge_resolution_db, read_resolution_db, ResolutionDB,
+};
 
 // mod instrument;
 mod cache;
@@ -42,6 +44,8 @@ struct Args {
     database: PathBuf,
     #[arg(long = "record-to")]
     resolution_record_filepath: Option<PathBuf>,
+    #[arg(long = "resolutions-from")]
+    custom_resolutions_filepath: Option<PathBuf>,
     /// In case of failures, retry automatically the invocation
     #[arg(long = "r", default_value_t = false)]
     retry: bool,
@@ -121,7 +125,7 @@ fn main() -> Result<(), io::Error> {
 
     // Load all resolution databases in memory.
     // Reduce them by merging them in the provided priority order.
-    let resolution_db = std::env::var("BUILDXYZ_RESOLUTION_PATH")
+    let mut resolution_db = std::env::var("BUILDXYZ_RESOLUTION_PATH")
         .unwrap_or(String::new())
         .split(":")
         .into_iter()
@@ -133,6 +137,12 @@ fn main() -> Result<(), io::Error> {
         .fold(ResolutionDB::new(), |left, right| {
             merge_resolution_db(left, right)
         });
+
+    if let Some(custom_resolutions_filepath) = args.custom_resolutions_filepath {
+        if let Some(custom_resolutions) = read_resolution_db(custom_resolutions_filepath) {
+            resolution_db = merge_resolution_db(resolution_db, custom_resolutions);
+        }
+    }
 
     let session = spawn_mount2(
         fs::BuildXYZ {
