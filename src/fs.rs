@@ -24,7 +24,7 @@ use crate::nix::{get_path_size, realize_path};
 use crate::popcount::Popcount;
 
 use crate::read_raw_buffer;
-use crate::resolution::{Decision, ProvideData, Resolution, ResolutionDB};
+use crate::resolution::{db_to_human_toml, Decision, ProvideData, Resolution, ResolutionDB};
 
 const UNIX_EPOCH: SystemTime = SystemTime::UNIX_EPOCH;
 
@@ -336,10 +336,8 @@ impl Filesystem for BuildXYZ {
             // Write this resolution on disk.
             std::fs::write(
                 filepath,
-                serde_json::to_string(&Vec::from_iter(
-                    std::mem::take(&mut self.resolution_db).values(),
-                ))
-                .expect("Failed to serialize resolution data"),
+                toml::to_string_pretty(&db_to_human_toml(&self.resolution_db))
+                    .expect("Failed to serialize in a human-way the resolution database"),
             )
             .expect("Failed to write resolution data");
         }
