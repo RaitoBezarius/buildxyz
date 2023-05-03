@@ -382,7 +382,6 @@ impl Filesystem for BuildXYZ {
             return reply.error(nix::errno::Errno::ENOENT as i32);
         }
 
-
         // Fast path: general resolutions
         let path_provide_data: Option<&ProvideData> = match self.get_decision(parent, name) {
             Some(Decision::Provide(data)) => Some(data),
