@@ -314,7 +314,7 @@ impl Filesystem for BuildXYZ {
         // https://www.kernel.org/doc/html/latest/filesystems/fuse.html
         // https://libfuse.github.io/doxygen/fuse__common_8h.html
         config
-            .add_capabilities(FUSE_CAP_PARALLEL_DIROPS | FUSE_CAP_CACHE_SYMLINKS)
+            .add_capabilities(FUSE_CAP_PARALLEL_DIROPS)
             .map_err(|err| -(err as i32))?;
         self.parent_prefixes.insert(1, "".to_string());
         // Create bin, lib, include, pkg-config inodes
