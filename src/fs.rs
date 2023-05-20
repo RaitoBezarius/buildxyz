@@ -237,11 +237,23 @@ fn shadow_symlink_leaves(src_dir: &Path, target_dir: &Path, excluded_dirs: &Vec<
             trace!("symlink {} -> {}", entry.path().display(), target_path.display());
             std::os::unix::fs::symlink(entry.path(), target_path)?;
         } else if ft.is_symlink() {
+            // Two things has to be done
+            // 1. Resolve completely the entry into resolved_target
+            // 2. Recurse on resolved_target -> target_path
+            // 2. Symlink target_path -> resolved_target
             let mut resolved_target = std::fs::read_link(entry.path())?;
             while resolved_target.is_symlink() {
                 resolved_target = std::fs::read_link(entry.path())?;
             }
-            // resolved_target is completely resolved.
+            // Now, `resolved_target` is completely resolved.
+            // Either, it's relative, either it's absolute.
+            // If it's relative, we correct it to an absolute link, by concatenating
+            // $src_dir/$resolved_target.
+            // If it's absolute, we proceed to recurse into it.
+            if resolved_target.is_relative() {
+                resolved_target = entry.path().parent().expect("Expected a symlink parented by at least /").join(resolved_target);
+            }
+            trace!("encountered an internal symlink: {} -> {}, symlinking or recursing depending on file type", entry.path().display(), resolved_target.display());
             // If it's a dir, recurse the symlinkage
             if resolved_target.is_dir() {
                 trace!("recursing into the symlink {} -> {} for directory symlinkage", entry.path().display(), resolved_target.display());
