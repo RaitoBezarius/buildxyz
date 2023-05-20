@@ -220,8 +220,11 @@ fn shadow_symlink_leaves(src_dir: &Path, target_dir: &Path, excluded_dirs: &Vec<
         let suffix_path = entry.path().strip_prefix(src_dir).unwrap();
         let target_path = target_dir.join(suffix_path);
 
+        trace!("examining entry: {} -> {}", entry.path().display(), target_path.display());
+
         // If the target path already exist, ignore this.
         if target_path.exists() {
+            trace!("{} already exist, skipping...", target_path.display());
             continue;
         }
 
@@ -230,6 +233,7 @@ fn shadow_symlink_leaves(src_dir: &Path, target_dir: &Path, excluded_dirs: &Vec<
             trace!("skipped {}", suffix_path.display());
             continue;
         }
+
         if ft.is_dir() {
             trace!("mkdir -p {} based on {}", target_path.display(), entry.path().display());
             std::fs::create_dir_all(target_path)?;
@@ -242,8 +246,10 @@ fn shadow_symlink_leaves(src_dir: &Path, target_dir: &Path, excluded_dirs: &Vec<
             // 2. Recurse on resolved_target -> target_path
             // 2. Symlink target_path -> resolved_target
             let mut resolved_target = std::fs::read_link(entry.path())?;
+            trace!("resolve {} -> {}", entry.path().display(), resolved_target.display());
             while resolved_target.is_symlink() {
-                resolved_target = std::fs::read_link(entry.path())?;
+                resolved_target = std::fs::read_link(resolved_target.as_path())?;
+                trace!("--> {}", resolved_target.display());
             }
             // Now, `resolved_target` is completely resolved.
             // Either, it's relative, either it's absolute.
