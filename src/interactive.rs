@@ -4,7 +4,7 @@ use std::{
     thread::JoinHandle,
 };
 
-use log::{debug, info};
+use log::{debug, info, warn};
 
 use crate::cache::{FileTreeEntry, StorePath};
 use crate::fs::FsEventMessage;
@@ -16,6 +16,38 @@ pub enum UserRequest {
     /// An interactive search request for the given path to the UI thread
     /// with a preferred candidate.
     InteractiveSearch(Vec<(StorePath, FileTreeEntry)>, StorePath),
+}
+
+pub fn prompt_among_choices(
+    prompt: &str,
+    choices: Vec<String>
+) -> Option<usize> {
+    loop {
+        let mut answer = String::new();
+        info!("{}", prompt);
+        for (index, choice) in choices.iter().enumerate() {
+            info!("{}. {}", index + 1, choice);
+        }
+        // TODO: make this non-blocking and interruptible
+        std::io::stdin()
+            .read_line(&mut answer)
+            .ok()
+            .expect("Failed to read line");
+
+        if answer.trim().to_lowercase() == "n" || answer.trim().to_lowercase() == "no" || answer.trim() == "" {
+            return None;
+        }
+
+        match answer.trim().parse::<usize>() {
+            Ok(k) if k >= 1 && k <= choices.len() => {
+                return Some(k - 1);
+            }
+            _ => {
+                warn!("Enter a valid choice between 1 and {} or `no`/`n`/press enter for skipping this choice", choices.len());
+                continue;
+            }
+        }
+    }
 }
 
 pub fn spawn_ui(
@@ -31,7 +63,7 @@ pub fn spawn_ui(
                 UserRequest::Quit => {
                     break;
                 }
-                UserRequest::InteractiveSearch(_candidates, suggested) => {
+                UserRequest::InteractiveSearch(candidates, suggested) => {
                     if automatic {
                         reply_fs
                             .send(FsEventMessage::PackageSuggestion(suggested))
@@ -39,21 +71,15 @@ pub fn spawn_ui(
                         continue;
                     }
 
-                    let mut answer = String::new();
-                    info!(
-                        "Dependency requested, suggestion is `{}`, inject it? y/n",
-                        suggested.origin().attr
+                    let choices: Vec<String> = candidates.iter().map(|(c, _)| c.origin().as_ref().clone().attr).collect();
+                    let potential_index = prompt_among_choices(
+                        "A dependency not found in your search paths was requested, pick a choice",
+                        choices
                     );
-                    std::io::stdin()
-                        .read_line(&mut answer)
-                        .ok()
-                        .expect("Failed to read line");
 
-                    match answer.as_str().trim() {
-                        "y" | "yes" | "Y" => {
-                            reply_fs.send(FsEventMessage::PackageSuggestion(suggested))
-                        }
-                        _ => reply_fs.send(FsEventMessage::IgnorePendingRequests),
+                    match potential_index {
+                        Some(index) => reply_fs.send(FsEventMessage::PackageSuggestion(candidates[index].0.clone())),
+                        None => reply_fs.send(FsEventMessage::IgnorePendingRequests),
                     }
                     .expect("Failed to send message to FS thread");
 
