@@ -149,7 +149,7 @@ impl Decision {
     }
 }
 
-#[derive(Serialize, Deserialize, Eq, Hash, PartialEq, Clone)]
+#[derive(Serialize, Deserialize, Eq, Hash, PartialEq, Clone, Debug)]
 #[serde(tag = "resolution")]
 #[non_exhaustive]
 pub enum Resolution {
@@ -211,7 +211,7 @@ impl Resolution {
     }
 }
 
-#[derive(Serialize, Deserialize, Eq, Hash, PartialEq, Clone)]
+#[derive(Serialize, Deserialize, Eq, Hash, PartialEq, Clone, Debug)]
 pub struct ResolutionData {
     pub requested_path: String,
     pub decision: Decision,

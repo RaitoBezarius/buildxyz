@@ -212,6 +212,7 @@ fn shadow_symlink_leaves(src_dir: &Path, target_dir: &Path, excluded_dirs: &Vec<
     // Therefore, you don't know where to send it.
     // Symlink compression should be done only at the end as an optimization if needed.
     // TODO: detect circular references.
+    trace!("shadow symlinking {} -> {}...", src_dir.display(), target_dir.display());
     for entry in WalkDir::new(src_dir).follow_links(false).into_iter().filter_map(|e| e.ok()) {
         // ensure target_dir.join(entry modulo src_dir) is a directory
         // or a symlink.
@@ -306,10 +307,8 @@ impl BuildXYZ {
         &mut self,
         store_path: &StorePath
     ) {
-        realize_path(store_path.as_str().to_string())
-            .expect("Cannot extend the working tree with a Nix path that cannot be realized.");
-
         let npath: PathBuf = OsString::from_vec(store_path.as_str().as_bytes().to_vec()).into();
+        debug!("Shadow symlinking all the leaves {} -> {}", npath.display(), self.fast_working_tree.display());
         // We do not want to symlink nix-support
         shadow_symlink_leaves(&npath, &self.fast_working_tree, &vec![
             "nix-support"
@@ -419,10 +418,42 @@ impl Filesystem for BuildXYZ {
         ]
         .into_iter()
         .for_each(|c| self.mkdir_fhs_directory(c));
+
         info!(
             "Loaded {} resolutions from the database.",
             self.resolution_db.len()
         );
+
+        let store_paths = self.resolution_db
+            .values()
+            .filter_map(|resolution| {
+                debug!("store path: {:?}", resolution);
+                match resolution {
+                    Resolution::ConstantResolution(data) => {
+                        if let Decision::Provide(provide_data) = &data.decision {
+                            return Some(provide_data.store_path.clone());
+                        }
+                    }
+                }
+
+                None
+            })
+        .collect::<Vec<StorePath>>();
+
+        info!(
+            "Will fast extend {} store paths.",
+            store_paths.len()
+        );
+
+        for spath in store_paths {
+            debug!("{} being extended in the working tree", spath.as_str());
+            self.extend_fast_working_tree(&spath);
+        }
+
+        info!(
+            "Fast working tree ready based on the resolutions."
+        );
+
         Ok(())
     }
 
