@@ -156,6 +156,7 @@ dependencies = [
  "signal-hook",
  "stderrlog",
  "tempfile",
+ "thiserror",
  "toml",
  "tui",
  "xdg",
