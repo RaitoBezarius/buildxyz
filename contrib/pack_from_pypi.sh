@@ -7,6 +7,7 @@ pypi_buildxyz() {
   echo "buildxyz $package"
   export TMPDIR="/buildxyz"
   bwrap \
+  --ro-bind /etc/resolv.conf /etc/resolv.conf \
   --share-net \
   --bind /nix /nix \
   --dev-bind /dev /dev \

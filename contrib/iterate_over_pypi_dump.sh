@@ -10,7 +10,9 @@ pypi_buildxyz() {
  # CAP_SYS_ADMIN is for the fusermount
  # /dev bind is for /dev/fuse
  # --share-net is necessary for network interactions.
+ # share also the DNS resolver.
   bwrap \
+  --ro-bind /etc/resolv.conf /etc/resolv.conf \
   --share-net \
   --bind /nix /nix \
   --dev-bind /dev /dev \
