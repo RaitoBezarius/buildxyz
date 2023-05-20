@@ -63,7 +63,7 @@ fn get_git_root() -> Option<std::path::PathBuf> {
     let output = Command::new("git")
         .args(vec!["rev-parse", "--show-toplevel"])
         .output()
-        .expect("Failed to run git");
+        .ok()?;
 
     if output.status.success() {
         Some(
