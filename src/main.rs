@@ -44,6 +44,9 @@ struct Args {
     /// Say yes to everything except if it is recorded as ENOENT.
     #[arg(long = "automatic", default_value_t = false)]
     automatic: bool,
+    /// No core resolution
+    #[arg(long = "naked", default_value_t = false)]
+    naked: bool,
     #[arg(long = "db", default_value_os = cache::cache_dir())]
     database: PathBuf,
     #[arg(long = "record-to")]
@@ -134,11 +137,12 @@ fn main() -> Result<(), io::Error> {
     // Load all resolution databases in memory.
     // Reduce them by merging them in the provided priority order.
     // Load *core* resolutions first
-    let core_resolution_db = CORE_RESOLUTIONS.find("**/*.toml").unwrap()
+    let core_resolution_db = if !args.naked { CORE_RESOLUTIONS.find("**/*.toml").unwrap()
         .into_iter()
         .map(|entry| CORE_RESOLUTIONS.get_file(entry.path()).expect("Failed to find a core resolution file inside the binary, corrupted binary?"))
         .filter_map(|file| read_resolution_db(file.contents_utf8().unwrap()))
-        .fold(ResolutionDB::new(), |left, right| merge_resolution_db(left, right));
+        .fold(ResolutionDB::new(), |left, right| merge_resolution_db(left, right))
+    } else { ResolutionDB::new() };
 
     let mut resolution_db = std::env::var("BUILDXYZ_RESOLUTION_PATH")
         .unwrap_or(String::new())
