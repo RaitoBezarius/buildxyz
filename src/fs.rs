@@ -219,6 +219,12 @@ fn shadow_symlink_leaves(src_dir: &Path, target_dir: &Path, excluded_dirs: &Vec<
         let ft = entry.file_type();
         let suffix_path = entry.path().strip_prefix(src_dir).unwrap();
         let target_path = target_dir.join(suffix_path);
+
+        // If the target path already exist, ignore this.
+        if target_path.exists() {
+            continue;
+        }
+
         // Skip stuff like nix-support/*
         if excluded_dirs.iter().any(|forbidden_dir| suffix_path.starts_with(forbidden_dir)) {
             trace!("skipped {}", suffix_path.display());
