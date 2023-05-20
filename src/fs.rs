@@ -1,7 +1,5 @@
 use std::collections::{HashMap, HashSet};
-use std::fs::File;
 use std::io;
-use std::io::BufReader;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant, SystemTime};
 
@@ -9,18 +7,21 @@ use std::sync::mpsc::{channel, Receiver, Sender};
 
 // TODO: is it Linux-specific?
 use std::cell::RefCell;
-use std::ffi::OsStr;
+use std::ffi::{OsStr, OsString};
+
+use std::os::unix::ffi::OsStringExt;
 
 use fuser::{FileAttr, FileType, Filesystem};
 
 use log::{debug, info, trace, warn};
 
 use regex::bytes::Regex;
+use walkdir::WalkDir;
 
-use crate::cache::database::{read_from_path, Reader};
-use crate::cache::{cache_dir, FileNode, FileTreeEntry, StorePath};
+use crate::cache::database::Reader;
+use crate::cache::{FileNode, FileTreeEntry, StorePath};
 use crate::interactive::UserRequest;
-use crate::nix::{get_path_size, realize_path};
+use crate::nix::realize_path;
 use crate::popcount::Popcount;
 
 use crate::read_raw_buffer;
@@ -49,6 +50,10 @@ pub struct BuildXYZ {
     pub parent_prefixes: HashMap<u64, String>,
     /// inode -> "virtual paths"
     pub nix_paths: HashMap<u64, Vec<u8>>,
+    /// inode -> "virtual foreign paths" (on another filesystem)
+    pub redirections: HashMap<u64, Vec<u8>>,
+    /// fast working tree for subgraph extraction
+    pub fast_working_tree: PathBuf,
     /// inode -> nix store paths
     pub last_inode: RefCell<u64>,
     /// Receiver channel for commands
@@ -75,7 +80,9 @@ impl Default for BuildXYZ {
             recorded_enoent: HashSet::new(),
             global_dirs: HashMap::new(),
             parent_prefixes: HashMap::new(),
+            fast_working_tree: String::new().into(),
             nix_paths: HashMap::new(),
+            redirections: HashMap::new(),
             last_inode: 2.into(),
             recv_fs_event: recv,
             send_ui_event: send,
@@ -197,6 +204,56 @@ where
     (store_path, fattr, nix_path.as_os_str().as_bytes().to_vec())*/
 }
 
+/// This will create all the directories and symlink only the leaves.
+/// It will fail in case of incompatibility.
+fn shadow_symlink_leaves(src_dir: &Path, target_dir: &Path, excluded_dirs: &Vec<&str>) -> std::io::Result<()> {
+    // Do not follow symlinks
+    // Otherwise, you will get an entry.path() which does not share a base prefix with src_dir
+    // Therefore, you don't know where to send it.
+    // Symlink compression should be done only at the end as an optimization if needed.
+    // TODO: detect circular references.
+    for entry in WalkDir::new(src_dir).follow_links(false).into_iter().filter_map(|e| e.ok()) {
+        // ensure target_dir.join(entry modulo src_dir) is a directory
+        // or a symlink.
+        let ft = entry.file_type();
+        let suffix_path = entry.path().strip_prefix(src_dir).unwrap();
+        let target_path = target_dir.join(suffix_path);
+        // Skip stuff like nix-support/*
+        if excluded_dirs.iter().any(|forbidden_dir| suffix_path.starts_with(forbidden_dir)) {
+            trace!("skipped {}", suffix_path.display());
+            continue;
+        }
+        if ft.is_dir() {
+            trace!("mkdir -p {} based on {}", target_path.display(), entry.path().display());
+            std::fs::create_dir_all(target_path)?;
+        } else if ft.is_file() {
+            trace!("symlink {} -> {}", entry.path().display(), target_path.display());
+            std::os::unix::fs::symlink(entry.path(), target_path)?;
+        } else if ft.is_symlink() {
+            let mut resolved_target = std::fs::read_link(entry.path())?;
+            while resolved_target.is_symlink() {
+                resolved_target = std::fs::read_link(entry.path())?;
+            }
+            // resolved_target is completely resolved.
+            // If it's a dir, recurse the symlinkage
+            if resolved_target.is_dir() {
+                trace!("recursing into the symlink {} -> {} for directory symlinkage", entry.path().display(), resolved_target.display());
+                shadow_symlink_leaves(
+                    &resolved_target,
+                    &target_path,
+                    excluded_dirs
+                )?;
+            }
+            else if resolved_target.is_file() {
+                trace!("symlink ({} ->) {} -> {}", entry.path().display(), resolved_target.display(), target_path.display());
+                std::os::unix::fs::symlink(entry.path(), target_path)?;
+            }
+        }
+    }
+
+    Ok(())
+}
+
 impl BuildXYZ {
     fn allocate_inode(&self) -> u64 {
         *self.last_inode.borrow_mut() += 1;
@@ -242,6 +299,23 @@ impl BuildXYZ {
             _ => None,
         }
     }
+    
+    // Shadow symlink in the fast working tree
+    // this Nix path
+    fn extend_fast_working_tree(
+        &mut self,
+        store_path: &StorePath
+    ) {
+        realize_path(store_path.as_str().to_string())
+            .expect("Cannot extend the working tree with a Nix path that cannot be realized.");
+
+        let npath: PathBuf = OsString::from_vec(store_path.as_str().as_bytes().to_vec()).into();
+        // We do not want to symlink nix-support
+        shadow_symlink_leaves(&npath, &self.fast_working_tree, &vec![
+            "nix-support"
+        ])
+            .expect("Failed to shadow symlink the Nix path inside the fast working tree, potential incompatibility");
+    }
 
     /// Serve the path as an answer to the filesystem
     /// It realizes the Nix path if it's not already.
@@ -263,6 +337,21 @@ impl BuildXYZ {
         self.nix_paths.insert(attribute.ino, nix_path);
 
         reply.entry(&Duration::from_secs(60 * 20), &attribute, attribute.ino);
+    }
+
+    /// Redirect to a filesystem file
+    /// via symlink
+    fn redirect_to_fs(
+        &mut self,
+        reply: fuser::ReplyEntry,
+        onfs_path: PathBuf
+    ) {
+        trace!("redirecting to {} on another filesystem", onfs_path.display());
+
+        let ft_attribute = build_fake_fattr(self.allocate_inode(),
+            fuser::FileType::Symlink);
+        self.redirections.insert(ft_attribute.ino, onfs_path.to_string_lossy().as_bytes().to_vec());
+        reply.entry(&Duration::from_secs(60 * 20), &ft_attribute, ft_attribute.ino);
     }
 
     /// Runs a query using our index
@@ -392,6 +481,13 @@ impl Filesystem for BuildXYZ {
             return reply.error(nix::errno::Errno::ENOENT as i32);
         }
 
+        // Fast path: fast working tree
+        // Rebase the target path based on the working tree structure
+        if self.fast_working_tree.join(&target_path).exists() {
+            trace!("FAST PATH — Path already exist in the fast working tree");
+            return self.redirect_to_fs(reply, self.fast_working_tree.join(target_path));
+        }
+
         // Fast path: general resolutions
         let path_provide_data: Option<&ProvideData> = match self.get_decision(parent, name) {
             Some(Decision::Provide(data)) => Some(data),
@@ -411,6 +507,7 @@ impl Filesystem for BuildXYZ {
             let ft_attribute = build_fake_fattr(self.allocate_inode(), data.kind);
             return self.serve_path(nix_path, target_path, ft_attribute, reply);
         }
+
 
         let mut candidates = self.search_in_index(&target_path);
 
@@ -441,10 +538,13 @@ impl Filesystem for BuildXYZ {
                 .as_str()
                 .as_bytes()
                 .to_vec();
+            // FIXME: that's very ugly.
+            let spath2 = store_path.clone();
             let spath = store_path.clone();
             self.send_ui_event
                 .send(UserRequest::InteractiveSearch(candidates.clone(), spath))
                 .expect("Failed to send UI thread a message");
+
 
             // FIXME: timeouts?
             match self.recv_fs_event.recv() {
@@ -462,6 +562,11 @@ impl Filesystem for BuildXYZ {
                             store_path: pkg,
                         }),
                     );
+                    // Now, we want to extract the whole subgraph
+                    // Instead of trying to figure out that subgraph
+                    // We can grab the Nix path and extend the fast working tree with it
+                    // à la lndir.
+                    self.extend_fast_working_tree(&spath2);
                     return self.serve_path(nix_path, target_path, ft_attribute, reply);
                 }
                 Ok(FsEventMessage::IgnorePendingRequests) | _ => {
@@ -496,6 +601,9 @@ impl Filesystem for BuildXYZ {
             } else {
                 reply.data(nix_path);
             }
+        }
+        else if let Some(redirection_path) = self.redirections.get(&ino) {
+            reply.data(redirection_path);
         } else {
             warn!("Attempt to read a non-existent Nix path, ino={}", ino);
             reply.error(nix::errno::Errno::ENOENT as i32);

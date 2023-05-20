@@ -125,7 +125,8 @@ fn main() -> Result<(), io::Error> {
 
     info!("Mounting the FUSE filesystem in the background...");
 
-    let tmpdir = tempfile::tempdir().expect("Failed to create a temporary directory");
+    let fuse_tmpdir = tempfile::tempdir().expect("Failed to create a temporary directory for the FUSE mountpoint");
+    let fast_tmpdir = tempfile::tempdir().expect("Failed to create a temporary directory for the fast working tree");
 
     // Load all resolution databases in memory.
     // Reduce them by merging them in the provided priority order.
@@ -154,13 +155,14 @@ fn main() -> Result<(), io::Error> {
             send_ui_event: send_ui_event.clone(),
             resolution_record_filepath: args.resolution_record_filepath,
             resolution_db,
+            fast_working_tree: fast_tmpdir.path().to_owned(),
             ..Default::default()
         },
-        tmpdir
+        fuse_tmpdir
             .path()
             .to_str()
             .expect("Failed to convert the path to a string"),
-        &[],
+
     )
     .expect("Error spawning the FUSE filesystem in the background");
 
@@ -182,7 +184,8 @@ fn main() -> Result<(), io::Error> {
             current_child_pid.clone(),
             retry.clone(),
             send_event.clone(),
-            tmpdir.path(),
+            fuse_tmpdir.path(),
+            fast_tmpdir.path()
         );
 
         // Main event loop
