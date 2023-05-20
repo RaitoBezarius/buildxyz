@@ -71,8 +71,7 @@ impl ProvideData {
         table
     }
 
-    pub fn from_toml(data: toml::Table) -> ParseResult<Self> {
-        eprintln!("{:?}", data);
+    pub fn from_toml(mut data: toml::Table) -> ParseResult<Self> {
         Ok(ProvideData {
             kind: match data.get("kind") {
                 Some(toml::Value::String(v)) => parse_filetype_kind(v)?,
@@ -86,21 +85,16 @@ impl ProvideData {
             },
             // use the deserializer here.
             file_entry_name: data
-                .get("file_entry_name")
+                .remove("file_entry_name")
                 .map(|v| match v {
-                    toml::Value::String(v) => Ok(v.clone()),
+                    toml::Value::String(v) => Ok(v),
                     _ => Err(ParseResolutionError::UnexpectedType(
                         "string".into(),
                         "file_entry_name".into(),
                     )),
                 })
                 .ok_or_else(|| ParseResolutionError::MissingField("file_entry_name".into()))??,
-            // use the deserializer here.
-            // god this is so fucking ugly.
-            // FIXME: broken.
-            store_path: StorePath::deserialize(toml::de::Deserializer::new(
-                &toml::to_string(&toml::Value::Table(data)).unwrap(),
-            ))
+            store_path: data.remove("store_path").expect("missing `store_path` field").try_into()
             .unwrap(),
         })
     }
@@ -240,9 +234,9 @@ fn locate_resolution_db(search_path: PathBuf) -> Option<PathBuf> {
     None
 }
 
-pub fn read_resolution_db(filename: PathBuf) -> Option<ResolutionDB> {
+pub fn read_resolution_db(data: &str) -> Option<ResolutionDB> {
     Resolution::from_toml(
-        toml::from_str(&fs::read_to_string(filename).expect("Failed to read resolution DB"))
+        toml::from_str(data)
             .expect("Failed to parse the TOML"),
     )
     .ok()
@@ -250,7 +244,7 @@ pub fn read_resolution_db(filename: PathBuf) -> Option<ResolutionDB> {
 
 /// Search in the provided path for a resolution database.
 pub fn load_resolution_db(search_path: PathBuf) -> Option<ResolutionDB> {
-    locate_resolution_db(search_path).and_then(read_resolution_db)
+    locate_resolution_db(search_path).and_then(|filename| read_resolution_db(&std::fs::read_to_string(filename).expect("Failed to read resolution DB from file")))
 }
 
 /// Unify two set of resolutions, right taking priority over left.
