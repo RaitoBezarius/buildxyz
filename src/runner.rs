@@ -93,6 +93,8 @@ pub fn spawn_instrumented_program(
                 info!("Command failed but it will be restarted soon.");
             } else if !success {
                 error!("Command failed");
+                send_to_main.send(EventMessage::Done)
+                    .expect("Failed to send message to main thread");
                 break;
             } else {
                 info!("Command ended successfully");
