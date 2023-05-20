@@ -14,7 +14,9 @@ use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::mpsc::channel;
 use std::sync::Arc;
 
-use crate::resolution::{load_resolution_db, merge_resolution_db, ResolutionDB};
+use crate::resolution::{
+    load_resolution_db, merge_resolution_db, read_resolution_db, ResolutionDB,
+};
 
 // mod instrument;
 mod cache;
@@ -38,10 +40,15 @@ pub enum EventMessage {
 #[command(author, version, about, long_about = None)]
 struct Args {
     cmd: String,
+    /// Say yes to everything except if it is recorded as ENOENT.
+    #[arg(long = "automatic", default_value_t = false)]
+    automatic: bool,
     #[arg(long = "db", default_value_os = cache::cache_dir())]
     database: PathBuf,
     #[arg(long = "record-to")]
     resolution_record_filepath: Option<PathBuf>,
+    #[arg(long = "resolutions-from")]
+    custom_resolutions_filepath: Option<PathBuf>,
     /// In case of failures, retry automatically the invocation
     #[arg(long = "r", default_value_t = false)]
     retry: bool,
@@ -101,7 +108,8 @@ fn main() -> Result<(), io::Error> {
     // If sent twice, uses SIGKILL
     let (send_event, recv_event) = channel::<EventMessage>();
     let (send_fs_event, recv_fs_event) = channel();
-    let (ui_join_handle, send_ui_event) = interactive::spawn_ui(send_fs_event.clone());
+    let (ui_join_handle, send_ui_event) =
+        interactive::spawn_ui(send_fs_event.clone(), args.automatic);
     let mut stop_count = 0;
 
     let ctrlc_event = send_event.clone();
@@ -121,7 +129,7 @@ fn main() -> Result<(), io::Error> {
 
     // Load all resolution databases in memory.
     // Reduce them by merging them in the provided priority order.
-    let resolution_db = std::env::var("BUILDXYZ_RESOLUTION_PATH")
+    let mut resolution_db = std::env::var("BUILDXYZ_RESOLUTION_PATH")
         .unwrap_or(String::new())
         .split(":")
         .into_iter()
@@ -133,6 +141,12 @@ fn main() -> Result<(), io::Error> {
         .fold(ResolutionDB::new(), |left, right| {
             merge_resolution_db(left, right)
         });
+
+    if let Some(custom_resolutions_filepath) = args.custom_resolutions_filepath {
+        if let Some(custom_resolutions) = read_resolution_db(custom_resolutions_filepath) {
+            resolution_db = merge_resolution_db(resolution_db, custom_resolutions);
+        }
+    }
 
     let session = spawn_mount2(
         fs::BuildXYZ {

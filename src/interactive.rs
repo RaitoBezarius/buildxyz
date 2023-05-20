@@ -18,7 +18,10 @@ pub enum UserRequest {
     InteractiveSearch(Vec<(StorePath, FileTreeEntry)>, StorePath),
 }
 
-pub fn spawn_ui(reply_fs: Sender<FsEventMessage>) -> (JoinHandle<()>, Sender<UserRequest>) {
+pub fn spawn_ui(
+    reply_fs: Sender<FsEventMessage>,
+    automatic: bool,
+) -> (JoinHandle<()>, Sender<UserRequest>) {
     let (send, recv) = channel();
 
     let join_handle = thread::spawn(move || {
@@ -29,6 +32,13 @@ pub fn spawn_ui(reply_fs: Sender<FsEventMessage>) -> (JoinHandle<()>, Sender<Use
                     break;
                 }
                 UserRequest::InteractiveSearch(_candidates, suggested) => {
+                    if automatic {
+                        reply_fs
+                            .send(FsEventMessage::PackageSuggestion(suggested))
+                            .expect("Failed to send message to FS thread");
+                        continue;
+                    }
+
                     let mut answer = String::new();
                     info!(
                         "Dependency requested, suggestion is `{}`, inject it? y/n",

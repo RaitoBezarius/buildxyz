@@ -44,14 +44,23 @@ pub fn spawn_instrumented_program(
     append_search_path(&mut env, "CMAKE_INCLUDE_PATH", cmake_path);
     append_search_path(&mut env, "ACLOCAL_PATH", aclocal_path);
 
-    //append_search_path(&mut env, "LD_LIBRARY_PATH", library_path.clone());
+    append_search_path(&mut env, "LD_LIBRARY_PATH", library_path.clone());
 
-    //env.entry("NIX_LDFLAGS".to_string()).and_modify(|env_path| {
-    //    *env_path = format!("{env_path} -L{library_path}", env_path=env_path, library_path=library_path.display());
-    //});
-    //env.entry("NIX_CFLAGS_COMPILE".to_string()).and_modify(|env_path| {
-    //    *env_path = format!("{env_path} -isystem {include_path}", env_path=env_path, include_path=include_path.display());
-    //});
+    env.entry("NIX_LDFLAGS".to_string()).and_modify(|env_path| {
+        *env_path = format!(
+            "{env_path} -L{library_path}",
+            env_path = env_path,
+            library_path = library_path.display()
+        );
+    });
+    env.entry("NIX_CFLAGS_COMPILE".to_string())
+        .and_modify(|env_path| {
+            *env_path = format!(
+                "{env_path} -isystem {include_path}",
+                env_path = env_path,
+                include_path = include_path.display()
+            );
+        });
 
     thread::spawn(move || {
         loop {

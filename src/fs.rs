@@ -300,12 +300,22 @@ impl BuildXYZ {
     }
 }
 
+// Allow parallel calls to lookup() as it should be fine.
+const FUSE_CAP_PARALLEL_DIROPS: u32 = 1 << 18;
+// Cache the symlinks we provide in the page cache.
+const FUSE_CAP_CACHE_SYMLINKS: u32 = 1 << 23;
+
 impl Filesystem for BuildXYZ {
     fn init(
         &mut self,
         _req: &fuser::Request<'_>,
-        _config: &mut fuser::KernelConfig,
+        config: &mut fuser::KernelConfig,
     ) -> Result<(), i32> {
+        // https://www.kernel.org/doc/html/latest/filesystems/fuse.html
+        // https://libfuse.github.io/doxygen/fuse__common_8h.html
+        config
+            .add_capabilities(FUSE_CAP_PARALLEL_DIROPS)
+            .map_err(|err| -(err as i32))?;
         self.parent_prefixes.insert(1, "".to_string());
         // Create bin, lib, include, pkg-config inodes
         // TODO: Keep this list synchronized with created search paths in runner.rs?
