@@ -15,6 +15,10 @@ output = "out"
 system = "x86_64-linux"
 toplevel = true
 
+["bin/pgen"]
+decision = "ignore"
+resolution = "constant"
+
 ["bin/pip"]
 decision = "provide"
 file_entry_name = "/bin/pip"
@@ -66,6 +70,10 @@ output = "dev"
 system = "x86_64-linux"
 toplevel = true
 
+["include/stdalign.h"]
+decision = "ignore"
+resolution = "constant"
+
 ["include/stdarg.h"]
 decision = "ignore"
 resolution = "constant"
@@ -88,6 +96,14 @@ system = "x86_64-linux"
 toplevel = true
 
 ["include/stddef.h"]
+decision = "ignore"
+resolution = "constant"
+
+["lib/libc.a"]
+decision = "ignore"
+resolution = "constant"
+
+["lib/libc.so"]
 decision = "ignore"
 resolution = "constant"
 
