@@ -5,16 +5,18 @@
 pypi_buildxyz() {
   package="$1"
   echo "buildxyz $package"
+ # CAP_SYS_ADMIN is for the fusermount
+ # /dev bind is for /dev/fuse
   bwrap \
   --bind /nix /nix \
-  --dev-bind /dev /dev \ # Necessary for /dev/fuse…
+  --dev-bind /dev /dev \
   --ro-bind $(which git) $(which git) \
   --ro-bind $(pwd)/target $(pwd)/target \
   --bind $(pwd)/examples $(pwd)/examples \
   --tmpfs /buildxyz \
   --proc /proc \
   --unshare-pid \
-  --cap-add CAP_SYS_ADMIN \ # Necessary for setuid
+  --cap-add CAP_SYS_ADMIN \
   --new-session \
     ./target/debug/buildxyz --automatic --record-to "examples/python/$package.toml" "pip install $package --prefix /tmp --no-binary :all:"
 }
