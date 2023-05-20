@@ -7,6 +7,7 @@ pypi_buildxyz() {
   echo "buildxyz $package"
   export TMPDIR="/buildxyz"
   bwrap \
+  --share-net \
   --bind /nix /nix \
   --dev-bind /dev /dev \
   --ro-bind $(which git) $(which git) \

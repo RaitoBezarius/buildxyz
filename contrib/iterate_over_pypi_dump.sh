@@ -9,7 +9,9 @@ pypi_buildxyz() {
   export TMPDIR="/buildxyz"
  # CAP_SYS_ADMIN is for the fusermount
  # /dev bind is for /dev/fuse
+ # --share-net is necessary for network interactions.
   bwrap \
+  --share-net \
   --bind /nix /nix \
   --dev-bind /dev /dev \
   --ro-bind $(which git) $(which git) \
