@@ -40,6 +40,9 @@ pub enum EventMessage {
 #[command(author, version, about, long_about = None)]
 struct Args {
     cmd: String,
+    /// Say yes to everything except if it is recorded as ENOENT.
+    #[arg(long = "automatic", default_value_t = false)]
+    automatic: bool,
     #[arg(long = "db", default_value_os = cache::cache_dir())]
     database: PathBuf,
     #[arg(long = "record-to")]
@@ -105,7 +108,8 @@ fn main() -> Result<(), io::Error> {
     // If sent twice, uses SIGKILL
     let (send_event, recv_event) = channel::<EventMessage>();
     let (send_fs_event, recv_fs_event) = channel();
-    let (ui_join_handle, send_ui_event) = interactive::spawn_ui(send_fs_event.clone());
+    let (ui_join_handle, send_ui_event) =
+        interactive::spawn_ui(send_fs_event.clone(), args.automatic);
     let mut stop_count = 0;
 
     let ctrlc_event = send_event.clone();
