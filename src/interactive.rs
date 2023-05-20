@@ -59,34 +59,36 @@ pub fn spawn_ui(
     let join_handle = thread::spawn(move || {
         info!("UI thread spawned and listening for events");
         loop {
-            match recv.recv().expect("Failed to receive message") {
-                UserRequest::Quit => {
-                    break;
-                }
-                UserRequest::InteractiveSearch(candidates, suggested) => {
-                    if automatic {
-                        reply_fs
-                            .send(FsEventMessage::PackageSuggestion(suggested))
-                            .expect("Failed to send message to FS thread");
-                        continue;
+            if let Ok(message) = recv.recv() {
+                match message {
+                    UserRequest::Quit => {
+                        break;
                     }
+                    UserRequest::InteractiveSearch(candidates, suggested) => {
+                        if automatic {
+                            reply_fs
+                                .send(FsEventMessage::PackageSuggestion(suggested))
+                                .expect("Failed to send message to FS thread");
+                            continue;
+                        }
 
-                    let choices: Vec<String> = candidates.iter().map(|(c, _)| c.origin().as_ref().clone().attr).collect();
-                    let potential_index = prompt_among_choices(
-                        "A dependency not found in your search paths was requested, pick a choice",
-                        choices
-                    );
+                        let choices: Vec<String> = candidates.iter().map(|(c, _)| c.origin().as_ref().clone().attr).collect();
+                        let potential_index = prompt_among_choices(
+                            "A dependency not found in your search paths was requested, pick a choice",
+                            choices
+                        );
 
-                    match potential_index {
-                        Some(index) => reply_fs.send(FsEventMessage::PackageSuggestion(candidates[index].0.clone())),
-                        None => reply_fs.send(FsEventMessage::IgnorePendingRequests),
+                        match potential_index {
+                            Some(index) => reply_fs.send(FsEventMessage::PackageSuggestion(candidates[index].0.clone())),
+                            None => reply_fs.send(FsEventMessage::IgnorePendingRequests),
+                        }
+                        .expect("Failed to send message to FS thread");
+
+                        // list all the candidates with numbers
+                        // provide ENOENT option
+
+                        // ENOENT
                     }
-                    .expect("Failed to send message to FS thread");
-
-                    // list all the candidates with numbers
-                    // provide ENOENT option
-
-                    // ENOENT
                 }
             }
         }
