@@ -34,7 +34,7 @@ lazy_static = "1.4.0"
 toml = "0.7.3"
 thiserror = "1.0.40"
 walkdir = "2.3.3"
-include_dir = "0.7.3"
+include_dir = { version = "0.7.3", features = [ "glob" ] }
 
 [profile.release]
 debug = true
