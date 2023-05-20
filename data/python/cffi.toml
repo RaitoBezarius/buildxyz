@@ -15,10 +15,6 @@ output = "out"
 system = "x86_64-linux"
 toplevel = true
 
-["bin/pgen"]
-decision = "ignore"
-resolution = "constant"
-
 ["bin/pip"]
 decision = "provide"
 file_entry_name = "/bin/pip"
@@ -43,12 +39,12 @@ kind = "symlink"
 resolution = "constant"
 
 ["bin/pkg-config".store_path]
-hash = "ndk8l5wgbmyy577a05h6y5gbwqmllf5p"
-name = "pkg-config-wrapper-0.29.2"
+hash = "prm4x2r6997idyjxajapk1177jczvjfj"
+name = "pkg-config-0.29.2"
 store_dir = "/nix/store"
 
 ["bin/pkg-config".store_path.origin]
-attr = "pkg-config"
+attr = "pkg-config-unwrapped"
 output = "out"
 system = "x86_64-linux"
 toplevel = true
@@ -69,10 +65,6 @@ attr = "libffi"
 output = "dev"
 system = "x86_64-linux"
 toplevel = true
-
-["include/stdalign.h"]
-decision = "ignore"
-resolution = "constant"
 
 ["include/stdarg.h"]
 decision = "ignore"
@@ -96,14 +88,6 @@ system = "x86_64-linux"
 toplevel = true
 
 ["include/stddef.h"]
-decision = "ignore"
-resolution = "constant"
-
-["lib/libc.a"]
-decision = "ignore"
-resolution = "constant"
-
-["lib/libc.so"]
 decision = "ignore"
 resolution = "constant"
 
@@ -148,12 +132,12 @@ kind = "symlink"
 resolution = "constant"
 
 ["lib/libgcc_s.so".store_path]
-hash = "76l4v99sk83ylfwkz8wmwrm4s8h73rhd"
-name = "glibc-2.35-224"
+hash = "2w4k8nvdyiggz717ygbbxchpnxrqc6y9"
+name = "gcc-12.2.0-lib"
 store_dir = "/nix/store"
 
 ["lib/libgcc_s.so".store_path.origin]
-attr = "glibc"
-output = "out"
+attr = "gcc-unwrapped"
+output = "lib"
 system = "x86_64-linux"
 toplevel = true
