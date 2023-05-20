@@ -13,7 +13,7 @@ use std::process::Command;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::mpsc::channel;
 use std::sync::Arc;
-use include_dir::include_dir;
+use include_dir::{include_dir, Dir};
 
 use crate::resolution::{
     load_resolution_db, merge_resolution_db, read_resolution_db, ResolutionDB,
@@ -73,6 +73,8 @@ fn get_git_root() -> Option<std::path::PathBuf> {
     }
 }
 
+
+static CORE_RESOLUTIONS: Dir = include_dir!("$BUILDXYZ_CORE_RESOLUTIONS");
 lazy_static! {
     /// Here are the default search paths by order:
     ///   $XDG_DATA_DIR/buildxyz
@@ -132,7 +134,12 @@ fn main() -> Result<(), io::Error> {
     // Load all resolution databases in memory.
     // Reduce them by merging them in the provided priority order.
     // Load *core* resolutions first
-    let core_resolutions = include_dir!("$BUILDXYZ_CORE_RESOLUTIONS");
+    let core_resolution_db = CORE_RESOLUTIONS.find("**/*.toml").unwrap()
+        .into_iter()
+        .map(|entry| CORE_RESOLUTIONS.get_file(entry.path()).expect("Failed to find a core resolution file inside the binary, corrupted binary?"))
+        .filter_map(|file| read_resolution_db(file.contents_utf8().unwrap()))
+        .fold(ResolutionDB::new(), |left, right| merge_resolution_db(left, right));
+
     let mut resolution_db = std::env::var("BUILDXYZ_RESOLUTION_PATH")
         .unwrap_or(String::new())
         .split(":")
@@ -142,12 +149,15 @@ fn main() -> Result<(), io::Error> {
         .chain(DEFAULT_RESOLUTION_PATHS.iter().cloned())
         .map(|searchpath| load_resolution_db(searchpath))
         .flatten() // Filter out all Nones.
-        .fold(ResolutionDB::new(), |left, right| {
+        .fold(core_resolution_db, |left, right| {
             merge_resolution_db(left, right)
         });
 
     if let Some(custom_resolutions_filepath) = args.custom_resolutions_filepath {
-        if let Some(custom_resolutions) = read_resolution_db(custom_resolutions_filepath) {
+        if let Some(custom_resolutions) = read_resolution_db(
+            &std::fs::read_to_string(custom_resolutions_filepath).expect("Failed to read from custom resolution file")
+        )
+        {
             resolution_db = merge_resolution_db(resolution_db, custom_resolutions);
         }
     }
@@ -165,6 +175,7 @@ fn main() -> Result<(), io::Error> {
             .path()
             .to_str()
             .expect("Failed to convert the path to a string"),
+        &[]
 
     )
     .expect("Error spawning the FUSE filesystem in the background");
