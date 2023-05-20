@@ -13,6 +13,7 @@ use std::process::Command;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::mpsc::channel;
 use std::sync::Arc;
+use include_dir::include_dir;
 
 use crate::resolution::{
     load_resolution_db, merge_resolution_db, read_resolution_db, ResolutionDB,
@@ -130,6 +131,8 @@ fn main() -> Result<(), io::Error> {
 
     // Load all resolution databases in memory.
     // Reduce them by merging them in the provided priority order.
+    // Load *core* resolutions first
+    let core_resolutions = include_dir!("$BUILDXYZ_CORE_RESOLUTIONS");
     let mut resolution_db = std::env::var("BUILDXYZ_RESOLUTION_PATH")
         .unwrap_or(String::new())
         .split(":")
