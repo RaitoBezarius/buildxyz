@@ -5,6 +5,8 @@
 pypi_buildxyz() {
   package="$1"
   echo "buildxyz $package"
+  # This is needed for the new tmpfs
+  export TMPDIR="/buildxyz"
  # CAP_SYS_ADMIN is for the fusermount
  # /dev bind is for /dev/fuse
   bwrap \
