@@ -16,6 +16,9 @@ fn append_search_path(env: &mut HashMap<String, String>, key: &str, value: PathB
             env_path = env_path,
             value = value.display()
         );
+    }).or_insert_with(|| {
+        debug!("`{}` was not present before, injecting", key);
+        format!("{}", value.display())
     });
 }
 
@@ -77,6 +80,7 @@ pub fn spawn_instrumented_program(
 
     thread::spawn(move || {
         loop {
+            debug!("Spawning a child `{}`...", cmd);
             let mut child = Command::new(&cmd)
                 .args(&args)
                 .env_clear()
