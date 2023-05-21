@@ -1,5 +1,5 @@
 #!/usr/bin/env nix-shell
-#!nix-shell --pure -i bash -p jq git nix bubblewrap which --keep BUILDXYZ_NIXPKGS --keep RUST_BACKTRACE
+#!nix-shell --pure -i bash -p jq git nix bubblewrap which cacert --keep BUILDXYZ_NIXPKGS --keep RUST_BACKTRACE
 # shellcheck shell=sh
 
 pypi_buildxyz() {
