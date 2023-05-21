@@ -15,7 +15,7 @@ pub enum UserRequest {
     Quit,
     /// An interactive search request for the given path to the UI thread
     /// with a preferred candidate.
-    InteractiveSearch(Vec<(StorePath, FileTreeEntry)>, StorePath),
+    InteractiveSearch(Vec<(StorePath, FileTreeEntry)>, (StorePath, FileTreeEntry)),
 }
 
 pub fn prompt_among_choices(
@@ -79,7 +79,7 @@ pub fn spawn_ui(
                         );
 
                         match potential_index {
-                            Some(index) => reply_fs.send(FsEventMessage::PackageSuggestion(candidates[index].0.clone())),
+                            Some(index) => reply_fs.send(FsEventMessage::PackageSuggestion(candidates[index].clone())),
                             None => reply_fs.send(FsEventMessage::IgnorePendingRequests),
                         }
                         .expect("Failed to send message to FS thread");

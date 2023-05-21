@@ -33,7 +33,7 @@ pub enum FsEventMessage {
     /// Flush all current pending filesystem access to ENOENT
     IgnorePendingRequests,
     /// A package suggestion as a reply to a user interactive search
-    PackageSuggestion(StorePath),
+    PackageSuggestion((StorePath, FileTreeEntry)),
 }
 
 pub struct BuildXYZ {
@@ -586,42 +586,33 @@ impl Filesystem for BuildXYZ {
 
             // Ask the user if he want to provide this dependency?
             let mut ft_attribute: fuser::FileAttr = ft_entry.node.clone().into();
-            let file_entry_name = String::from_utf8_lossy(&ft_entry.path).to_string();
-            let nix_path = store_path
-                .join_entry(ft_entry.clone())
-                .into_owned()
-                .as_str()
-                .as_bytes()
-                .to_vec();
-            // FIXME: that's very ugly.
-            let spath2 = store_path.clone();
-            let spath = store_path.clone();
+            let suggestion = (store_path.clone(), ft_entry.clone());
             self.send_ui_event
-                .send(UserRequest::InteractiveSearch(candidates.clone(), spath))
+                .send(UserRequest::InteractiveSearch(candidates.clone(), suggestion))
                 .expect("Failed to send UI thread a message");
 
 
             // FIXME: timeouts?
             match self.recv_fs_event.recv() {
-                Ok(FsEventMessage::PackageSuggestion(pkg)) => {
+                Ok(FsEventMessage::PackageSuggestion((pkg, ft_entry))) => {
                     debug!("prompt reply: {:?}", pkg);
                     // Allocate a file attribute for this file entry.
                     ft_attribute.ino = self.allocate_inode();
-                    // TODO: use actually pkg, for now, it's guaranteed pkg == suggested candidate.
                     self.record_resolution(
                         parent,
                         name,
                         Decision::Provide(ProvideData {
-                            file_entry_name,
+                            file_entry_name: String::from_utf8_lossy(&ft_entry.path).to_string(),
                             kind: ft_attribute.kind,
-                            store_path: pkg,
+                            store_path: pkg.clone(),
                         }),
                     );
                     // Now, we want to extract the whole subgraph
                     // Instead of trying to figure out that subgraph
                     // We can grab the Nix path and extend the fast working tree with it
                     // à la lndir.
-                    self.extend_fast_working_tree(&spath2);
+                    self.extend_fast_working_tree(&pkg);
+                    let nix_path = pkg.join_entry(ft_entry.clone()).into_owned().as_str().as_bytes().to_vec();
                     return self.serve_path(nix_path, target_path, ft_attribute, reply);
                 }
                 Ok(FsEventMessage::IgnorePendingRequests) | _ => {
