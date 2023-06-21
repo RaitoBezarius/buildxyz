@@ -8,18 +8,22 @@ use std::{collections::HashMap, sync::mpsc::Sender};
 
 use crate::EventMessage;
 
-fn append_search_path(env: &mut HashMap<String, String>, key: &str, value: PathBuf) {
-    env.entry(key.to_string()).and_modify(|env_path| {
+fn append_search_path(env: &mut HashMap<String, String>, key: &str, value: PathBuf, insert: bool) {
+    let entry = env.entry(key.to_string()).and_modify(|env_path| {
         debug!("old env: {}={}", key, env_path);
         *env_path = format!(
             "{env_path}:{value}",
             env_path = env_path,
             value = value.display()
         );
-    }).or_insert_with(|| {
-        debug!("`{}` was not present before, injecting", key);
-        format!("{}", value.display())
     });
+
+    if insert {
+        entry.or_insert_with(|| {
+            debug!("`{}` was not present before, injecting", key);
+            format!("{}", value.display())
+        });
+    }
 }
 
 fn append_search_paths(env: &mut HashMap<String, String>,
@@ -32,15 +36,15 @@ fn append_search_paths(env: &mut HashMap<String, String>,
     let aclocal_path = root_path.join("aclocal");
     let perl_path = root_path.join("perl");
 
-    append_search_path(env, "PATH", bin_path);
+    append_search_path(env, "PATH", bin_path, true);
 
-    append_search_path(env, "PERL5LIB", perl_path);
+    append_search_path(env, "PERL5LIB", perl_path, false);
 
-    append_search_path(env, "PKG_CONFIG_PATH", pkgconfig_path);
-    append_search_path(env, "CMAKE_INCLUDE_PATH", cmake_path);
-    append_search_path(env, "ACLOCAL_PATH", aclocal_path);
+    append_search_path(env, "PKG_CONFIG_PATH", pkgconfig_path, true);
+    append_search_path(env, "CMAKE_INCLUDE_PATH", cmake_path, true);
+    append_search_path(env, "ACLOCAL_PATH", aclocal_path, false);
 
-    append_search_path(env, "LD_LIBRARY_PATH", library_path.clone());
+    append_search_path(env, "LD_LIBRARY_PATH", library_path.clone(), false);
     env.entry("NIX_LDFLAGS".to_string()).and_modify(|env_path| {
         debug!("old NIX_LDFLAGS={}", env_path);
         *env_path = format!(
