@@ -44,9 +44,9 @@ fn append_search_paths(env: &mut HashMap<String, String>,
     append_search_path(env, "CMAKE_INCLUDE_PATH", cmake_path, true);
     append_search_path(env, "ACLOCAL_PATH", aclocal_path, false);
 
-    append_search_path(env, "LD_LIBRARY_PATH", library_path.clone(), false);
     env.entry("NIX_LDFLAGS".to_string()).and_modify(|env_path| {
         debug!("old NIX_LDFLAGS={}", env_path);
+    // append_search_path(env, "LD_LIBRARY_PATH", library_path.clone(), false);
         *env_path = format!(
             "{env_path} -L{library_path}",
             env_path = env_path,
