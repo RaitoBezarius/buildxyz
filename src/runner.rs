@@ -44,21 +44,21 @@ fn append_search_paths(env: &mut HashMap<String, String>,
     append_search_path(env, "CMAKE_INCLUDE_PATH", cmake_path, true);
     append_search_path(env, "ACLOCAL_PATH", aclocal_path, false);
 
-    env.entry("NIX_LDFLAGS".to_string()).and_modify(|env_path| {
-        debug!("old NIX_LDFLAGS={}", env_path);
     // append_search_path(env, "LD_LIBRARY_PATH", library_path.clone(), false);
+    env.entry("NIX_LDFLAGS_AFTER".to_string()).and_modify(|env_path| {
+        debug!("old NIX_LDFLAGS_AFTER={}", env_path);
         *env_path = format!(
             "{env_path} -L{library_path}",
             env_path = env_path,
             library_path = library_path.display()
         );
-        debug!("new NIX_LDFLAGS={}", env_path);
+        debug!("new NIX_LDFLAGS_AFTER={}", env_path);
     });
     env.entry("NIX_CFLAGS_COMPILE".to_string())
         .and_modify(|env_path| {
             debug!("old NIX_CFLAGS_COMPILE={}", env_path);
             *env_path = format!(
-                "{env_path} -isystem {include_path}",
+                "{env_path} -idirafter {include_path}",
                 env_path = env_path,
                 include_path = include_path.display()
             );
