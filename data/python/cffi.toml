@@ -49,20 +49,20 @@ output = "out"
 system = "x86_64-linux"
 toplevel = true
 
-["include/ffi.h"]
+["bin/rustc"]
 decision = "provide"
-file_entry_name = "/include/ffi.h"
+file_entry_name = "/bin/rustc"
 kind = "symlink"
 resolution = "constant"
 
-["include/ffi.h".store_path]
-hash = "4j08mgygxhi9y3957hbwqn1bg02va18y"
-name = "libffi-3.4.4-dev"
+["bin/rustc".store_path]
+hash = "bxm02qp0lnm4sin3x78qrxp0gsbby1jb"
+name = "rustc-1.67.1"
 store_dir = "/nix/store"
 
-["include/ffi.h".store_path.origin]
-attr = "libffi"
-output = "dev"
+["bin/rustc".store_path.origin]
+attr = "rustc"
+output = "out"
 system = "x86_64-linux"
 toplevel = true
 
@@ -91,39 +91,26 @@ toplevel = true
 decision = "ignore"
 resolution = "constant"
 
-["lib/libffi.so"]
+["lib/libc.so"]
 decision = "provide"
-file_entry_name = "/lib/libffi.so"
+file_entry_name = "/lib/libc.so"
 kind = "symlink"
 resolution = "constant"
 
-["lib/libffi.so".store_path]
-hash = "m0fsvgc5hrn3yjwsl9fvj5m6pyjk2il2"
-name = "libffi-3.4.4"
+["lib/libc.so".store_path]
+hash = "76l4v99sk83ylfwkz8wmwrm4s8h73rhd"
+name = "glibc-2.35-224"
 store_dir = "/nix/store"
 
-["lib/libffi.so".store_path.origin]
-attr = "libffi"
+["lib/libc.so".store_path.origin]
+attr = "glibc"
 output = "out"
 system = "x86_64-linux"
 toplevel = true
 
 ["lib/libgcc.a"]
-decision = "provide"
-file_entry_name = "/lib/libgcc.a"
-kind = "symlink"
+decision = "ignore"
 resolution = "constant"
-
-["lib/libgcc.a".store_path]
-hash = "3kw7qmiv434s75vx5hbj3w8c129r4d7s"
-name = "libgcc-11.3.0"
-store_dir = "/nix/store"
-
-["lib/libgcc.a".store_path.origin]
-attr = "libgcc"
-output = "out"
-system = "x86_64-linux"
-toplevel = true
 
 ["lib/libgcc_s.so"]
 decision = "provide"
@@ -139,5 +126,22 @@ store_dir = "/nix/store"
 ["lib/libgcc_s.so".store_path.origin]
 attr = "gcc-unwrapped"
 output = "lib"
+system = "x86_64-linux"
+toplevel = true
+
+["lib/pkgconfig/libffi.pc"]
+decision = "provide"
+file_entry_name = "/lib/pkgconfig/libffi.pc"
+kind = "symlink"
+resolution = "constant"
+
+["lib/pkgconfig/libffi.pc".store_path]
+hash = "4j08mgygxhi9y3957hbwqn1bg02va18y"
+name = "libffi-3.4.4-dev"
+store_dir = "/nix/store"
+
+["lib/pkgconfig/libffi.pc".store_path.origin]
+attr = "libffi"
+output = "dev"
 system = "x86_64-linux"
 toplevel = true

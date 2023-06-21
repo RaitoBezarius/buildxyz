@@ -36,6 +36,23 @@ output = "out"
 system = "x86_64-linux"
 toplevel = true
 
+["bin/rustc"]
+decision = "provide"
+file_entry_name = "/bin/rustc"
+kind = "symlink"
+resolution = "constant"
+
+["bin/rustc".store_path]
+hash = "bxm02qp0lnm4sin3x78qrxp0gsbby1jb"
+name = "rustc-1.67.1"
+store_dir = "/nix/store"
+
+["bin/rustc".store_path.origin]
+attr = "rustc"
+output = "out"
+system = "x86_64-linux"
+toplevel = true
+
 ["include/stdalign.h"]
 decision = "ignore"
 resolution = "constant"
@@ -65,22 +82,26 @@ toplevel = true
 decision = "ignore"
 resolution = "constant"
 
-["lib/libgcc.a"]
+["lib/libc.so"]
 decision = "provide"
-file_entry_name = "/lib/libgcc.a"
+file_entry_name = "/lib/libc.so"
 kind = "symlink"
 resolution = "constant"
 
-["lib/libgcc.a".store_path]
-hash = "3kw7qmiv434s75vx5hbj3w8c129r4d7s"
-name = "libgcc-11.3.0"
+["lib/libc.so".store_path]
+hash = "76l4v99sk83ylfwkz8wmwrm4s8h73rhd"
+name = "glibc-2.35-224"
 store_dir = "/nix/store"
 
-["lib/libgcc.a".store_path.origin]
-attr = "libgcc"
+["lib/libc.so".store_path.origin]
+attr = "glibc"
 output = "out"
 system = "x86_64-linux"
 toplevel = true
+
+["lib/libgcc.a"]
+decision = "ignore"
+resolution = "constant"
 
 ["lib/libgcc_s.so"]
 decision = "provide"
