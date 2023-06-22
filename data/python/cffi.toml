@@ -50,84 +50,8 @@ system = "x86_64-linux"
 toplevel = true
 
 ["bin/rustc"]
-decision = "provide"
-file_entry_name = "/bin/rustc"
-kind = "symlink"
-resolution = "constant"
-
-["bin/rustc".store_path]
-hash = "bxm02qp0lnm4sin3x78qrxp0gsbby1jb"
-name = "rustc-1.67.1"
-store_dir = "/nix/store"
-
-["bin/rustc".store_path.origin]
-attr = "rustc"
-output = "out"
-system = "x86_64-linux"
-toplevel = true
-
-["include/stdarg.h"]
 decision = "ignore"
 resolution = "constant"
-
-["include/stdc-predef.h"]
-decision = "provide"
-file_entry_name = "/include/stdc-predef.h"
-kind = "symlink"
-resolution = "constant"
-
-["include/stdc-predef.h".store_path]
-hash = "pqnd39aq2sksad2zvswjcpkqdc7ig3f9"
-name = "glibc-2.35-224-dev"
-store_dir = "/nix/store"
-
-["include/stdc-predef.h".store_path.origin]
-attr = "glibc"
-output = "dev"
-system = "x86_64-linux"
-toplevel = true
-
-["include/stddef.h"]
-decision = "ignore"
-resolution = "constant"
-
-["lib/libc.so"]
-decision = "provide"
-file_entry_name = "/lib/libc.so"
-kind = "symlink"
-resolution = "constant"
-
-["lib/libc.so".store_path]
-hash = "76l4v99sk83ylfwkz8wmwrm4s8h73rhd"
-name = "glibc-2.35-224"
-store_dir = "/nix/store"
-
-["lib/libc.so".store_path.origin]
-attr = "glibc"
-output = "out"
-system = "x86_64-linux"
-toplevel = true
-
-["lib/libgcc.a"]
-decision = "ignore"
-resolution = "constant"
-
-["lib/libgcc_s.so"]
-decision = "provide"
-file_entry_name = "/lib/libgcc_s.so"
-kind = "symlink"
-resolution = "constant"
-
-["lib/libgcc_s.so".store_path]
-hash = "2w4k8nvdyiggz717ygbbxchpnxrqc6y9"
-name = "gcc-12.2.0-lib"
-store_dir = "/nix/store"
-
-["lib/libgcc_s.so".store_path.origin]
-attr = "gcc-unwrapped"
-output = "lib"
-system = "x86_64-linux"
-toplevel = true
 
 ["lib/pkgconfig/libffi.pc"]
 decision = "provide"
