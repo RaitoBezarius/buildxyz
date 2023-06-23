@@ -1,0 +1,67 @@
+["bin/lsb_release"]
+decision = "provide"
+file_entry_name = "/bin/lsb_release"
+kind = "symlink"
+resolution = "constant"
+
+["bin/lsb_release".store_path]
+hash = "ji55v58cch94h30inpnrd5h5jra9fwd8"
+name = "lsb_release"
+store_dir = "/nix/store"
+
+["bin/lsb_release".store_path.origin]
+attr = "lsb-release"
+output = "out"
+system = "x86_64-linux"
+toplevel = true
+
+["bin/pip"]
+decision = "provide"
+file_entry_name = "/bin/pip"
+kind = "symlink"
+resolution = "constant"
+
+["bin/pip".store_path]
+hash = "8gzj48mkr8i824a4ali025hk85gmfdzy"
+name = "python3.10-pip-22.3.1"
+store_dir = "/nix/store"
+
+["bin/pip".store_path.origin]
+attr = "python310Packages.pip"
+output = "out"
+system = "x86_64-linux"
+toplevel = true
+
+["lib/pkgconfig/libffi.pc"]
+decision = "provide"
+file_entry_name = "/lib/pkgconfig/libffi.pc"
+kind = "symlink"
+resolution = "constant"
+
+["lib/pkgconfig/libffi.pc".store_path]
+hash = "4j08mgygxhi9y3957hbwqn1bg02va18y"
+name = "libffi-3.4.4-dev"
+store_dir = "/nix/store"
+
+["lib/pkgconfig/libffi.pc".store_path.origin]
+attr = "libffi"
+output = "dev"
+system = "x86_64-linux"
+toplevel = true
+
+["lib/pkgconfig/openssl.pc"]
+decision = "provide"
+file_entry_name = "/lib/pkgconfig/openssl.pc"
+kind = "symlink"
+resolution = "constant"
+
+["lib/pkgconfig/openssl.pc".store_path]
+hash = "fyiwac98bi86nd5qzz9bhvs1bvmmwgad"
+name = "openssl-3.0.8-dev"
+store_dir = "/nix/store"
+
+["lib/pkgconfig/openssl.pc".store_path.origin]
+attr = "openssl"
+output = "dev"
+system = "x86_64-linux"
+toplevel = true
