@@ -206,12 +206,12 @@ where
 
 /// This will create all the directories and symlink only the leaves.
 /// It will fail in case of incompatibility.
-fn shadow_symlink_leaves(src_dir: &Path, target_dir: &Path, excluded_dirs: &Vec<&str>) -> std::io::Result<()> {
+fn shadow_symlink_leaves(src_dir: &Path, target_dir: &Path, excluded_dirs: &Vec<&str>, already_seen: &mut HashSet<PathBuf>) -> std::io::Result<()> {
     // Do not follow symlinks
     // Otherwise, you will get an entry.path() which does not share a base prefix with src_dir
     // Therefore, you don't know where to send it.
     // Symlink compression should be done only at the end as an optimization if needed.
-    // TODO: detect circular references.
+    already_seen.insert(src_dir.canonicalize().expect("Failed to canonicalize the source path for cycle detection").into());
     trace!("shadow symlinking {} -> {}...", src_dir.display(), target_dir.display());
     for entry in WalkDir::new(src_dir).follow_links(false).into_iter().filter_map(|e| e.ok()) {
         // ensure target_dir.join(entry modulo src_dir) is a directory
@@ -263,10 +263,16 @@ fn shadow_symlink_leaves(src_dir: &Path, target_dir: &Path, excluded_dirs: &Vec<
             // If it's a dir, recurse the symlinkage
             if resolved_target.is_dir() {
                 trace!("recursing into the symlink {} -> {} for directory symlinkage", entry.path().display(), resolved_target.display());
+                if already_seen.contains(&resolved_target.canonicalize().expect("Failed to canonicalize the resolved target")) {
+                    trace!("… but this source path {} was already seen, skipping.", entry.path().display());
+                    continue;
+                }
+
                 shadow_symlink_leaves(
                     &resolved_target,
                     &target_path,
-                    excluded_dirs
+                    excluded_dirs,
+                    already_seen
                 )?;
             }
             else if resolved_target.is_file() {
@@ -336,7 +342,7 @@ impl BuildXYZ {
         // We do not want to symlink nix-support
         shadow_symlink_leaves(&npath, &self.fast_working_tree, &vec![
             "nix-support"
-        ])
+        ], &mut HashSet::new())
             .expect("Failed to shadow symlink the Nix path inside the fast working tree, potential incompatibility");
     }
 
@@ -607,12 +613,16 @@ impl Filesystem for BuildXYZ {
                             store_path: pkg.clone(),
                         }),
                     );
+                    let nix_path = pkg.join_entry(ft_entry.clone()).into_owned().as_str().as_bytes().to_vec();
+                    let nix_path_as_str = String::from_utf8_lossy(&nix_path);
+                    realize_path(nix_path_as_str.into())
+                        .expect("Nix path should be realized, database seems incoherent with Nix store.");
+
                     // Now, we want to extract the whole subgraph
                     // Instead of trying to figure out that subgraph
                     // We can grab the Nix path and extend the fast working tree with it
                     // à la lndir.
                     self.extend_fast_working_tree(&pkg);
-                    let nix_path = pkg.join_entry(ft_entry.clone()).into_owned().as_str().as_bytes().to_vec();
                     return self.serve_path(nix_path, target_path, ft_attribute, reply);
                 }
                 Ok(FsEventMessage::IgnorePendingRequests) | _ => {
