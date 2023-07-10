@@ -11,7 +11,7 @@ nix = "0.26.2"
 log = "0.4.17"
 stderrlog = "0.5.4"
 ctrlc = "3.2.5"
-clap = { version = "4.1.8", features = [ "derive" ] }
+clap = { version = "4.3.11", features = [ "derive" ] }
 crossbeam-channel = "0.5.7"
 xdg = "2.4.1"
 tui = "0.19.0"
