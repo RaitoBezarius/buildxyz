@@ -56,6 +56,9 @@ struct Args {
     /// In case of failures, retry automatically the invocation
     #[arg(long = "r", default_value_t = false)]
     retry: bool,
+    /// Print ignored paths
+    #[arg(long = "print-ignored-paths", default_value_t = false)]
+    print_ignored_paths: bool
 }
 
 fn get_git_root() -> Option<std::path::PathBuf> {
@@ -164,6 +167,21 @@ fn main() -> Result<(), io::Error> {
         {
             resolution_db = merge_resolution_db(resolution_db, custom_resolutions);
         }
+    }
+
+    if args.print_ignored_paths {
+        println!("List of ignored paths:");
+        for resolution in resolution_db.values() {
+            let resolution::Resolution::ConstantResolution(data) = resolution;
+            match data.decision {
+                resolution::Decision::Ignore => {
+                    println!("\t{}", data.requested_path);
+                },
+                _ => {}
+            }
+        }
+        
+        return Ok(());
     }
 
     let session = spawn_mount2(
