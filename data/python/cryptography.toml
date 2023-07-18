@@ -1,3 +1,20 @@
+["bin/cargo"]
+decision = "provide"
+file_entry_name = "/bin/cargo"
+kind = "symlink"
+resolution = "constant"
+
+["bin/cargo".store_path]
+hash = "qiklc9rr5jg1zck0rb7vj4wn1n7yxx67"
+name = "cargo-1.67.1"
+store_dir = "/nix/store"
+
+["bin/cargo".store_path.origin]
+attr = "cargo"
+output = "out"
+system = "x86_64-linux"
+toplevel = true
+
 ["bin/lsb_release"]
 decision = "provide"
 file_entry_name = "/bin/lsb_release"
@@ -28,6 +45,40 @@ store_dir = "/nix/store"
 
 ["bin/pip".store_path.origin]
 attr = "python310Packages.pip"
+output = "out"
+system = "x86_64-linux"
+toplevel = true
+
+["bin/pkg-config"]
+decision = "provide"
+file_entry_name = "/bin/pkg-config"
+kind = "symlink"
+resolution = "constant"
+
+["bin/pkg-config".store_path]
+hash = "prm4x2r6997idyjxajapk1177jczvjfj"
+name = "pkg-config-0.29.2"
+store_dir = "/nix/store"
+
+["bin/pkg-config".store_path.origin]
+attr = "pkg-config-unwrapped"
+output = "out"
+system = "x86_64-linux"
+toplevel = true
+
+["bin/rustc"]
+decision = "provide"
+file_entry_name = "/bin/rustc"
+kind = "symlink"
+resolution = "constant"
+
+["bin/rustc".store_path]
+hash = "bxm02qp0lnm4sin3x78qrxp0gsbby1jb"
+name = "rustc-1.67.1"
+store_dir = "/nix/store"
+
+["bin/rustc".store_path.origin]
+attr = "rustc"
 output = "out"
 system = "x86_64-linux"
 toplevel = true

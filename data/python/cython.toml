@@ -35,7 +35,3 @@ attr = "python310Packages.pip"
 output = "out"
 system = "x86_64-linux"
 toplevel = true
-
-["bin/rustc"]
-decision = "ignore"
-resolution = "constant"

@@ -49,10 +49,6 @@ output = "out"
 system = "x86_64-linux"
 toplevel = true
 
-["bin/rustc"]
-decision = "ignore"
-resolution = "constant"
-
 ["lib/pkgconfig/libffi.pc"]
 decision = "provide"
 file_entry_name = "/lib/pkgconfig/libffi.pc"
