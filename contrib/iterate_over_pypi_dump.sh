@@ -1,5 +1,5 @@
 #!/usr/bin/env nix-shell
-#!nix-shell --pure -i bash -p jq git nix bubblewrap which cacert --keep BUILDXYZ_NIXPKGS --keep RUST_BACKTRACE
+#!nix-shell --pure -i bash -p jq git nix bubblewrap which cacert parallel tmux --keep BUILDXYZ_NIXPKGS --keep RUST_BACKTRACE
 # shellcheck shell=sh
 
 pypi_buildxyz() {
@@ -27,6 +27,7 @@ pypi_buildxyz() {
     ./target/debug/buildxyz --automatic --record-to "examples/python/$package.toml" "pip install $package --prefix /tmp --no-binary :all:"
 }
 
-jq -rc '.rows | .[] | .project' top-pypi.json | while read -r package; do
-  pypi_buildxyz "$package"
-done
+export -f pypi_buildxyz
+
+readarray -t PACKAGES < <(jq -rc '.rows | .[] | .project' top-pypi.json)
+parallel --progress --bar --delay 2.5 --jobs 50% --tmux pypi_buildxyz ::: "${PACKAGES[@]}"
