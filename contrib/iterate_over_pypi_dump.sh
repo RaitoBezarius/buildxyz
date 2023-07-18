@@ -4,8 +4,9 @@
 
 JOB="${1:-pypi-job}"
 
-pypi_buildxyz() {
-  package="$1"
+generic_buildxyz() {
+  builder="$1"
+  package="$2"
   echo "buildxyz $package"
   # This is needed for the new tmpfs
   export TMPDIR="/buildxyz"
@@ -26,10 +27,19 @@ pypi_buildxyz() {
   --unshare-pid \
   --cap-add CAP_SYS_ADMIN \
   --new-session \
-    ./target/debug/buildxyz --automatic --record-to "examples/python/$package.toml" "pip install $package --prefix /tmp --no-binary :all:"
+    ./target/debug/buildxyz --automatic --record-to "examples/python/$package.toml" "$builder $package"
+}
+
+pip_install() {
+  package="$1"
+  pip install "$package" --prefix /tmp --no-binary :all
+}
+
+pypi_buildxyz() {
+  generic_buildxyz pip_install "$@"
 }
 
 export -f pypi_buildxyz
 
-readarray -t PACKAGES < <(jq -rc '.rows | .[] | .project' top-pypi.json)
-parallel --joblog $JOB --progress --bar --delay 2.5 --jobs 50% --tmux pypi_buildxyz ::: "${PACKAGES[@]}"
+readarray -t PYPI_PACKAGES < <(jq -rc '.rows | .[] | .project' top-pypi.json)
+parallel --joblog $JOB --progress --bar --delay 2.5 --jobs 50% --tmux pypi_buildxyz ::: "${PYPI_PACKAGES[@]}"
