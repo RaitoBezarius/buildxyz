@@ -38,6 +38,7 @@ rustPlatform.buildRustPackage
     # Use provided zstd rather than vendored one.
     ZSTD_SYS_USE_PKG_CONFIG = true;
     BUILDXYZ_NIXPKGS = path;
+    BUILDXYZ_CORE_RESOLUTIONS = ./data;
 
     buildInputs = [ zstd fuse ];
     nativeBuildInputs = [ openssl cargo-flamegraph pkg-config ] ++ lib.optional enableLint clippy;

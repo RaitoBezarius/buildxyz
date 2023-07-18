@@ -1,20 +1,3 @@
-["bin/hg"]
-decision = "provide"
-file_entry_name = "/bin/hg"
-kind = "symlink"
-resolution = "constant"
-
-["bin/hg".store_path]
-hash = "v2s4kbgqfd0s9b6hd8b982azdca4m3l4"
-name = "mercurial-6.3.3"
-store_dir = "/nix/store"
-
-["bin/hg".store_path.origin]
-attr = "mercurial"
-output = "out"
-system = "x86_64-linux"
-toplevel = true
-
 ["bin/lsb_release"]
 decision = "provide"
 file_entry_name = "/bin/lsb_release"

@@ -8,8 +8,8 @@ use std::{collections::HashMap, sync::mpsc::Sender};
 
 use crate::EventMessage;
 
-fn append_search_path(env: &mut HashMap<String, String>, key: &str, value: PathBuf) {
-    env.entry(key.to_string()).and_modify(|env_path| {
+fn append_search_path(env: &mut HashMap<String, String>, key: &str, value: PathBuf, insert: bool) {
+    let entry = env.entry(key.to_string()).and_modify(|env_path| {
         debug!("old env: {}={}", key, env_path);
         *env_path = format!(
             "{env_path}:{value}",
@@ -17,6 +17,53 @@ fn append_search_path(env: &mut HashMap<String, String>, key: &str, value: PathB
             value = value.display()
         );
     });
+
+    if insert {
+        entry.or_insert_with(|| {
+            debug!("`{}` was not present before, injecting", key);
+            format!("{}", value.display())
+        });
+    }
+}
+
+fn append_search_paths(env: &mut HashMap<String, String>,
+    root_path: &Path) {
+    let bin_path = root_path.join("bin");
+    let pkgconfig_path = root_path.join("lib").join("pkgconfig");
+    let library_path = root_path.join("lib");
+    let include_path = root_path.join("include");
+    let cmake_path = root_path.join("cmake");
+    let aclocal_path = root_path.join("aclocal");
+    let perl_path = root_path.join("perl");
+
+    append_search_path(env, "PATH", bin_path, true);
+
+    append_search_path(env, "PERL5LIB", perl_path, false);
+
+    append_search_path(env, "PKG_CONFIG_PATH", pkgconfig_path, true);
+    append_search_path(env, "CMAKE_INCLUDE_PATH", cmake_path, true);
+    append_search_path(env, "ACLOCAL_PATH", aclocal_path, false);
+
+    // append_search_path(env, "LD_LIBRARY_PATH", library_path.clone(), false);
+    env.entry("NIX_LDFLAGS_AFTER".to_string()).and_modify(|env_path| {
+        debug!("old NIX_LDFLAGS_AFTER={}", env_path);
+        *env_path = format!(
+            "{env_path} -L{library_path}",
+            env_path = env_path,
+            library_path = library_path.display()
+        );
+        debug!("new NIX_LDFLAGS_AFTER={}", env_path);
+    });
+    env.entry("NIX_CFLAGS_COMPILE".to_string())
+        .and_modify(|env_path| {
+            debug!("old NIX_CFLAGS_COMPILE={}", env_path);
+            *env_path = format!(
+                "{env_path} -idirafter {include_path}",
+                env_path = env_path,
+                include_path = include_path.display()
+            );
+            debug!("new NIX_CFLAGS_COMPILE={}", env_path);
+        });
 }
 
 pub fn spawn_instrumented_program(
@@ -27,43 +74,17 @@ pub fn spawn_instrumented_program(
     should_retry: Arc<AtomicBool>,
     send_to_main: Sender<EventMessage>,
     mountpoint: &Path,
+    fast_working_root: &Path
 ) -> thread::JoinHandle<()> {
-    let bin_path = mountpoint.join("bin");
-    let pkgconfig_path = mountpoint.join("lib").join("pkgconfig");
-    let library_path = mountpoint.join("lib");
-    let include_path = mountpoint.join("include");
-    let cmake_path = mountpoint.join("cmake");
-    let aclocal_path = mountpoint.join("aclocal");
-    let perl_path = mountpoint.join("perl");
 
-    append_search_path(&mut env, "PATH", bin_path);
-
-    append_search_path(&mut env, "PERL5LIB", perl_path);
-
-    append_search_path(&mut env, "PKG_CONFIG_PATH", pkgconfig_path);
-    append_search_path(&mut env, "CMAKE_INCLUDE_PATH", cmake_path);
-    append_search_path(&mut env, "ACLOCAL_PATH", aclocal_path);
-
-    append_search_path(&mut env, "LD_LIBRARY_PATH", library_path.clone());
-
-    env.entry("NIX_LDFLAGS".to_string()).and_modify(|env_path| {
-        *env_path = format!(
-            "{env_path} -L{library_path}",
-            env_path = env_path,
-            library_path = library_path.display()
-        );
-    });
-    env.entry("NIX_CFLAGS_COMPILE".to_string())
-        .and_modify(|env_path| {
-            *env_path = format!(
-                "{env_path} -isystem {include_path}",
-                env_path = env_path,
-                include_path = include_path.display()
-            );
-        });
+    // Fast working tree
+    append_search_paths(&mut env, fast_working_root);
+    // FUSE
+    append_search_paths(&mut env, mountpoint);
 
     thread::spawn(move || {
         loop {
+            debug!("Spawning a child `{}`...", cmd);
             let mut child = Command::new(&cmd)
                 .args(&args)
                 .env_clear()
@@ -80,6 +101,8 @@ pub fn spawn_instrumented_program(
                 info!("Command failed but it will be restarted soon.");
             } else if !success {
                 error!("Command failed");
+                send_to_main.send(EventMessage::Done)
+                    .expect("Failed to send message to main thread");
                 break;
             } else {
                 info!("Command ended successfully");

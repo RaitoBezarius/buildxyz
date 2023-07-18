@@ -1,7 +1,5 @@
 use std::collections::{HashMap, HashSet};
-use std::fs::File;
 use std::io;
-use std::io::BufReader;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant, SystemTime};
 
@@ -9,18 +7,21 @@ use std::sync::mpsc::{channel, Receiver, Sender};
 
 // TODO: is it Linux-specific?
 use std::cell::RefCell;
-use std::ffi::OsStr;
+use std::ffi::{OsStr, OsString};
+
+use std::os::unix::ffi::OsStringExt;
 
 use fuser::{FileAttr, FileType, Filesystem};
 
 use log::{debug, info, trace, warn};
 
 use regex::bytes::Regex;
+use walkdir::WalkDir;
 
-use crate::cache::database::{read_from_path, Reader};
-use crate::cache::{cache_dir, FileNode, FileTreeEntry, StorePath};
+use crate::cache::database::Reader;
+use crate::cache::{FileNode, FileTreeEntry, StorePath};
 use crate::interactive::UserRequest;
-use crate::nix::{get_path_size, realize_path};
+use crate::nix::realize_path;
 use crate::popcount::Popcount;
 
 use crate::read_raw_buffer;
@@ -32,7 +33,7 @@ pub enum FsEventMessage {
     /// Flush all current pending filesystem access to ENOENT
     IgnorePendingRequests,
     /// A package suggestion as a reply to a user interactive search
-    PackageSuggestion(StorePath),
+    PackageSuggestion((StorePath, FileTreeEntry)),
 }
 
 pub struct BuildXYZ {
@@ -49,6 +50,10 @@ pub struct BuildXYZ {
     pub parent_prefixes: HashMap<u64, String>,
     /// inode -> "virtual paths"
     pub nix_paths: HashMap<u64, Vec<u8>>,
+    /// inode -> "virtual foreign paths" (on another filesystem)
+    pub redirections: HashMap<u64, Vec<u8>>,
+    /// fast working tree for subgraph extraction
+    pub fast_working_tree: PathBuf,
     /// inode -> nix store paths
     pub last_inode: RefCell<u64>,
     /// Receiver channel for commands
@@ -75,7 +80,9 @@ impl Default for BuildXYZ {
             recorded_enoent: HashSet::new(),
             global_dirs: HashMap::new(),
             parent_prefixes: HashMap::new(),
+            fast_working_tree: String::new().into(),
             nix_paths: HashMap::new(),
+            redirections: HashMap::new(),
             last_inode: 2.into(),
             recv_fs_event: recv,
             send_ui_event: send,
@@ -197,6 +204,87 @@ where
     (store_path, fattr, nix_path.as_os_str().as_bytes().to_vec())*/
 }
 
+/// This will create all the directories and symlink only the leaves.
+/// It will fail in case of incompatibility.
+fn shadow_symlink_leaves(src_dir: &Path, target_dir: &Path, excluded_dirs: &Vec<&str>, already_seen: &mut HashSet<PathBuf>) -> std::io::Result<()> {
+    // Do not follow symlinks
+    // Otherwise, you will get an entry.path() which does not share a base prefix with src_dir
+    // Therefore, you don't know where to send it.
+    // Symlink compression should be done only at the end as an optimization if needed.
+    already_seen.insert(src_dir.canonicalize().expect("Failed to canonicalize the source path for cycle detection").into());
+    trace!("shadow symlinking {} -> {}...", src_dir.display(), target_dir.display());
+    for entry in WalkDir::new(src_dir).follow_links(false).into_iter().filter_map(|e| e.ok()) {
+        // ensure target_dir.join(entry modulo src_dir) is a directory
+        // or a symlink.
+        let ft = entry.file_type();
+        let suffix_path = entry.path().strip_prefix(src_dir).unwrap();
+        let target_path = target_dir.join(suffix_path);
+
+        trace!("examining entry: {} -> {}", entry.path().display(), target_path.display());
+
+        // If the target path already exist, ignore this.
+        if target_path.exists() {
+            trace!("{} already exist, skipping...", target_path.display());
+            continue;
+        }
+
+        // Skip stuff like nix-support/*
+        if excluded_dirs.iter().any(|forbidden_dir| suffix_path.starts_with(forbidden_dir)) {
+            trace!("skipped {}", suffix_path.display());
+            continue;
+        }
+
+        if ft.is_dir() {
+            trace!("mkdir -p {} based on {}", target_path.display(), entry.path().display());
+            std::fs::create_dir_all(target_path)?;
+        } else if ft.is_file() {
+            trace!("symlink {} -> {}", entry.path().display(), target_path.display());
+            std::os::unix::fs::symlink(entry.path(), target_path)?;
+        } else if ft.is_symlink() {
+            // Two things has to be done
+            // 1. Resolve completely the entry into resolved_target
+            // 2. Recurse on resolved_target -> target_path
+            // 2. Symlink target_path -> resolved_target
+            let mut resolved_target = std::fs::read_link(entry.path())?;
+            trace!("resolve {} -> {}", entry.path().display(), resolved_target.display());
+            while resolved_target.is_symlink() {
+                resolved_target = std::fs::read_link(resolved_target.as_path())?;
+                trace!("--> {}", resolved_target.display());
+            }
+            // Now, `resolved_target` is completely resolved.
+            // Either, it's relative, either it's absolute.
+            // If it's relative, we correct it to an absolute link, by concatenating
+            // $src_dir/$resolved_target.
+            // If it's absolute, we proceed to recurse into it.
+            if resolved_target.is_relative() {
+                resolved_target = entry.path().parent().expect("Expected a symlink parented by at least /").join(resolved_target);
+            }
+            trace!("encountered an internal symlink: {} -> {}, symlinking or recursing depending on file type", entry.path().display(), resolved_target.display());
+            // If it's a dir, recurse the symlinkage
+            if resolved_target.is_dir() {
+                trace!("recursing into the symlink {} -> {} for directory symlinkage", entry.path().display(), resolved_target.display());
+                if already_seen.contains(&resolved_target.canonicalize().expect("Failed to canonicalize the resolved target")) {
+                    trace!("… but this source path {} was already seen, skipping.", entry.path().display());
+                    continue;
+                }
+
+                shadow_symlink_leaves(
+                    &resolved_target,
+                    &target_path,
+                    excluded_dirs,
+                    already_seen
+                )?;
+            }
+            else if resolved_target.is_file() {
+                trace!("symlink ({} ->) {} -> {}", entry.path().display(), resolved_target.display(), target_path.display());
+                std::os::unix::fs::symlink(entry.path(), target_path)?;
+            }
+        }
+    }
+
+    Ok(())
+}
+
 impl BuildXYZ {
     fn allocate_inode(&self) -> u64 {
         *self.last_inode.borrow_mut() += 1;
@@ -242,6 +330,21 @@ impl BuildXYZ {
             _ => None,
         }
     }
+    
+    // Shadow symlink in the fast working tree
+    // this Nix path
+    fn extend_fast_working_tree(
+        &mut self,
+        store_path: &StorePath
+    ) {
+        let npath: PathBuf = OsString::from_vec(store_path.as_str().as_bytes().to_vec()).into();
+        debug!("Shadow symlinking all the leaves {} -> {}", npath.display(), self.fast_working_tree.display());
+        // We do not want to symlink nix-support
+        shadow_symlink_leaves(&npath, &self.fast_working_tree, &vec![
+            "nix-support"
+        ], &mut HashSet::new())
+            .expect("Failed to shadow symlink the Nix path inside the fast working tree, potential incompatibility");
+    }
 
     /// Serve the path as an answer to the filesystem
     /// It realizes the Nix path if it's not already.
@@ -263,6 +366,21 @@ impl BuildXYZ {
         self.nix_paths.insert(attribute.ino, nix_path);
 
         reply.entry(&Duration::from_secs(60 * 20), &attribute, attribute.ino);
+    }
+
+    /// Redirect to a filesystem file
+    /// via symlink
+    fn redirect_to_fs(
+        &mut self,
+        reply: fuser::ReplyEntry,
+        onfs_path: PathBuf
+    ) {
+        trace!("redirecting to {} on another filesystem", onfs_path.display());
+
+        let ft_attribute = build_fake_fattr(self.allocate_inode(),
+            fuser::FileType::Symlink);
+        self.redirections.insert(ft_attribute.ino, onfs_path.to_string_lossy().as_bytes().to_vec());
+        reply.entry(&Duration::from_secs(60 * 20), &ft_attribute, ft_attribute.ino);
     }
 
     /// Runs a query using our index
@@ -330,10 +448,42 @@ impl Filesystem for BuildXYZ {
         ]
         .into_iter()
         .for_each(|c| self.mkdir_fhs_directory(c));
+
         info!(
             "Loaded {} resolutions from the database.",
             self.resolution_db.len()
         );
+
+        let store_paths = self.resolution_db
+            .values()
+            .filter_map(|resolution| {
+                debug!("store path: {:?}", resolution);
+                match resolution {
+                    Resolution::ConstantResolution(data) => {
+                        if let Decision::Provide(provide_data) = &data.decision {
+                            return Some(provide_data.store_path.clone());
+                        }
+                    }
+                }
+
+                None
+            })
+        .collect::<Vec<StorePath>>();
+
+        info!(
+            "Will fast extend {} store paths.",
+            store_paths.len()
+        );
+
+        for spath in store_paths {
+            debug!("{} being extended in the working tree", spath.as_str());
+            self.extend_fast_working_tree(&spath);
+        }
+
+        info!(
+            "Fast working tree ready based on the resolutions."
+        );
+
         Ok(())
     }
 
@@ -392,6 +542,13 @@ impl Filesystem for BuildXYZ {
             return reply.error(nix::errno::Errno::ENOENT as i32);
         }
 
+        // Fast path: fast working tree
+        // Rebase the target path based on the working tree structure
+        if self.fast_working_tree.join(&target_path).exists() {
+            trace!("FAST PATH — Path already exist in the fast working tree");
+            return self.redirect_to_fs(reply, self.fast_working_tree.join(target_path));
+        }
+
         // Fast path: general resolutions
         let path_provide_data: Option<&ProvideData> = match self.get_decision(parent, name) {
             Some(Decision::Provide(data)) => Some(data),
@@ -411,6 +568,7 @@ impl Filesystem for BuildXYZ {
             let ft_attribute = build_fake_fattr(self.allocate_inode(), data.kind);
             return self.serve_path(nix_path, target_path, ft_attribute, reply);
         }
+
 
         let mut candidates = self.search_in_index(&target_path);
 
@@ -434,34 +592,37 @@ impl Filesystem for BuildXYZ {
 
             // Ask the user if he want to provide this dependency?
             let mut ft_attribute: fuser::FileAttr = ft_entry.node.clone().into();
-            let file_entry_name = String::from_utf8_lossy(&ft_entry.path).to_string();
-            let nix_path = store_path
-                .join_entry(ft_entry.clone())
-                .into_owned()
-                .as_str()
-                .as_bytes()
-                .to_vec();
-            let spath = store_path.clone();
+            let suggestion = (store_path.clone(), ft_entry.clone());
             self.send_ui_event
-                .send(UserRequest::InteractiveSearch(candidates.clone(), spath))
+                .send(UserRequest::InteractiveSearch(candidates.clone(), suggestion))
                 .expect("Failed to send UI thread a message");
+
 
             // FIXME: timeouts?
             match self.recv_fs_event.recv() {
-                Ok(FsEventMessage::PackageSuggestion(pkg)) => {
+                Ok(FsEventMessage::PackageSuggestion((pkg, ft_entry))) => {
                     debug!("prompt reply: {:?}", pkg);
                     // Allocate a file attribute for this file entry.
                     ft_attribute.ino = self.allocate_inode();
-                    // TODO: use actually pkg, for now, it's guaranteed pkg == suggested candidate.
                     self.record_resolution(
                         parent,
                         name,
                         Decision::Provide(ProvideData {
-                            file_entry_name,
+                            file_entry_name: String::from_utf8_lossy(&ft_entry.path).to_string(),
                             kind: ft_attribute.kind,
-                            store_path: pkg,
+                            store_path: pkg.clone(),
                         }),
                     );
+                    let nix_path = pkg.join_entry(ft_entry.clone()).into_owned().as_str().as_bytes().to_vec();
+                    let nix_path_as_str = String::from_utf8_lossy(&nix_path);
+                    realize_path(nix_path_as_str.into())
+                        .expect("Nix path should be realized, database seems incoherent with Nix store.");
+
+                    // Now, we want to extract the whole subgraph
+                    // Instead of trying to figure out that subgraph
+                    // We can grab the Nix path and extend the fast working tree with it
+                    // à la lndir.
+                    self.extend_fast_working_tree(&pkg);
                     return self.serve_path(nix_path, target_path, ft_attribute, reply);
                 }
                 Ok(FsEventMessage::IgnorePendingRequests) | _ => {
@@ -496,6 +657,9 @@ impl Filesystem for BuildXYZ {
             } else {
                 reply.data(nix_path);
             }
+        }
+        else if let Some(redirection_path) = self.redirections.get(&ino) {
+            reply.data(redirection_path);
         } else {
             warn!("Attempt to read a non-existent Nix path, ino={}", ino);
             reply.error(nix::errno::Errno::ENOENT as i32);

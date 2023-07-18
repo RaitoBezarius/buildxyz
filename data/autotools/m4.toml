@@ -1,0 +1,16 @@
+["share/aclocal/ax_zoneinfo.m4"]
+decision = "provide"
+file_entry_name = "/share/aclocal/ax_zoneinfo.m4"
+kind = "symlink"
+resolution = "constant"
+
+["share/aclocal/ax_zoneinfo.m4".store_path]
+hash = "0znwn1lw0268i7pj0rylhz9dnzbwijjn"
+name = "autoconf-archive-2022.09.03"
+store_dir = "/nix/store"
+
+["share/aclocal/ax_zoneinfo.m4".store_path.origin]
+attr = "autoconf-archive"
+output = "out"
+system = "x86_64-linux"
+toplevel = true
