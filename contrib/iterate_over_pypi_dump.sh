@@ -2,6 +2,8 @@
 #!nix-shell --pure -i bash -p jq git nix bubblewrap which cacert parallel tmux --keep BUILDXYZ_NIXPKGS --keep RUST_BACKTRACE
 # shellcheck shell=sh
 
+JOB="${1:-pypi-job}"
+
 pypi_buildxyz() {
   package="$1"
   echo "buildxyz $package"
@@ -30,4 +32,4 @@ pypi_buildxyz() {
 export -f pypi_buildxyz
 
 readarray -t PACKAGES < <(jq -rc '.rows | .[] | .project' top-pypi.json)
-parallel --progress --bar --delay 2.5 --jobs 50% --tmux pypi_buildxyz ::: "${PACKAGES[@]}"
+parallel --joblog $JOB --progress --bar --delay 2.5 --jobs 50% --tmux pypi_buildxyz ::: "${PACKAGES[@]}"
