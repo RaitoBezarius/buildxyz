@@ -1,6 +1,12 @@
 #!/usr/bin/env nix-shell
-#!nix-shell --pure -i bash -p jq git nix bubblewrap which cacert --keep BUILDXYZ_NIXPKGS --keep RUST_BACKTRACE
+#!nix-shell --pure -i bash -p jq git nix bubblewrap which cacert strace --keep BUILDXYZ_NIXPKGS --keep RUST_BACKTRACE
 # shellcheck shell=sh
+
+buildxyz_global_flags=()
+
+if [[ -v AUTOMATIC ]]; then
+  buildxyz_global_flags+=(--automatic)
+fi
 
 pypi_buildxyz() {
   package="$1"
@@ -19,7 +25,7 @@ pypi_buildxyz() {
   --unshare-pid \
   --cap-add CAP_SYS_ADMIN \
   --new-session \
-    ./target/debug/buildxyz --record-to "examples/python/$package.toml" "pip install $package --prefix /tmp --no-binary :all:"
+    ./target/debug/buildxyz "${buildxyz_global_flags[@]}" --record-to "examples/python/$package.toml" "pip install $package --prefix /tmp --no-binary :all:"
 }
 
 pypi_buildxyz "$1"
