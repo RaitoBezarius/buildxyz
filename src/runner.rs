@@ -76,7 +76,7 @@ pub fn spawn_instrumented_program(
     send_to_main: Sender<EventMessage>,
     mountpoint: &Path,
     fast_working_root: &Path
-) -> thread::JoinHandle<()> {
+) -> thread::JoinHandle<Option<i32>> {
 
     // Fast working tree
     append_search_paths(&mut env, fast_working_root);
@@ -104,13 +104,13 @@ pub fn spawn_instrumented_program(
                 error!("Command failed");
                 send_to_main.send(EventMessage::Done)
                     .expect("Failed to send message to main thread");
-                break;
+                return status.code();
             } else {
                 info!("Command ended successfully");
                 send_to_main
                     .send(EventMessage::Done)
                     .expect("Failed to send message to main thread");
-                break;
+                return status.code();
             }
         }
     })

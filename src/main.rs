@@ -287,7 +287,7 @@ fn main() -> Result<(), io::Error> {
                     // Ensure we quit the UI thread.
                     let _ = send_ui_event.send(interactive::UserRequest::Quit);
                     info!("Waiting for the runner & UI threads to exit...");
-                    run_join_handle
+                    let status_code = run_join_handle
                         .join()
                         .expect("Failed to wait for the runner thread");
                     ui_join_handle
@@ -295,6 +295,15 @@ fn main() -> Result<(), io::Error> {
                         .expect("Failed to wait for the UI thread");
                     info!("Unmounting the filesystem...");
                     session.join();
+
+                    if let Some(code) = status_code {
+                        if code != 0 && args.automatic {
+                            // Exit with the inner process status code
+                            // for proper bookkeeping of errors.
+                            std::process::exit(code);
+                        }
+                    }
+
                     break;
                 }
             }
