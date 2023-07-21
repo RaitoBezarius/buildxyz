@@ -1,0 +1,3 @@
+["include/sys/endian.h"]
+decision = "ignore"
+resolution = "constant"
