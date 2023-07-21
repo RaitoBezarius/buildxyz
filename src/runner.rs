@@ -44,16 +44,17 @@ fn append_search_paths(env: &mut HashMap<String, String>,
     append_search_path(env, "CMAKE_INCLUDE_PATH", cmake_path, true);
     append_search_path(env, "ACLOCAL_PATH", aclocal_path, false);
 
+    // Runtime libraries:
+    // This is not a workable approach because DT_RUNPATH is after LD_LIBRARY_PATH
+    // in priority. Anyway, on NixOS, most binaries comes with all the proper
+    // libraries, on other OS, you must have them in your FHS.
+    // Therefore, all that remains is handling foreign binaries.
+    // This is taken care by composing buildxyz with nix-ld for example.
     // append_search_path(env, "LD_LIBRARY_PATH", library_path.clone(), false);
-    env.entry("NIX_LDFLAGS_AFTER".to_string()).and_modify(|env_path| {
-        debug!("old NIX_LDFLAGS_AFTER={}", env_path);
-        *env_path = format!(
-            "{env_path} -L{library_path}",
-            env_path = env_path,
-            library_path = library_path.display()
-        );
-        debug!("new NIX_LDFLAGS_AFTER={}", env_path);
-    });
+
+    // Build-time libraries
+    append_search_path(env, "LIBRARY_PATH", library_path.clone(), true);
+
     env.entry("NIX_CFLAGS_COMPILE".to_string())
         .and_modify(|env_path| {
             debug!("old NIX_CFLAGS_COMPILE={}", env_path);
