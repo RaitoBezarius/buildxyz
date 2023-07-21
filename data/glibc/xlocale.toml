@@ -1,0 +1,3 @@
+["include/xlocale.h"]
+decision = "ignore"
+resolution = "constant"
