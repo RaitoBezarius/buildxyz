@@ -4,7 +4,7 @@ use cache::database::read_raw_buffer;
 use clap::Parser;
 use fuser::spawn_mount2;
 use lazy_static::lazy_static;
-use log::{debug, info};
+use log::{debug, info, warn};
 use std::io;
 use std::iter;
 use std::os::unix::ffi::OsStringExt;
@@ -15,8 +15,10 @@ use std::sync::mpsc::channel;
 use std::sync::Arc;
 use include_dir::{include_dir, Dir};
 
+use crate::cache::StorePath;
+use crate::nix::realize_path;
 use crate::resolution::{
-    load_resolution_db, merge_resolution_db, read_resolution_db, ResolutionDB,
+    load_resolution_db, merge_resolution_db, read_resolution_db, ResolutionDB, Resolution, Decision,
 };
 
 // mod instrument;
@@ -182,6 +184,30 @@ fn main() -> Result<(), io::Error> {
         }
         
         return Ok(());
+    }
+
+
+    let store_paths = resolution_db
+        .values()
+        .filter_map(|resolution| {
+            debug!("store path: {:?}", resolution);
+            match resolution {
+                Resolution::ConstantResolution(data) => {
+                    if let Decision::Provide(provide_data) = &data.decision {
+                        return Some(provide_data.store_path.clone());
+                    }
+                }
+            }
+
+            None
+        })
+    .collect::<Vec<StorePath>>();
+
+    for spath in store_paths {
+        debug!("Ensuring that resolution {} is available in the Nix store", spath.as_str());
+        if realize_path(spath.as_str().to_string()).is_err() {
+            warn!("Failed to realize it, BuildXYZ may fail");
+        }
     }
 
     let session = spawn_mount2(

@@ -477,12 +477,6 @@ impl Filesystem for BuildXYZ {
 
         for spath in store_paths {
             debug!("{} being extended in the working tree", spath.as_str());
-            if realize_path(spath.as_str().to_string()).is_err() {
-                warn!(
-                    "Failed to realize {}, recorded in our resolutions, failure may occur",
-                    spath.as_str()
-                );
-            }
             self.extend_fast_working_tree(&spath);
         }
 
