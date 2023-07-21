@@ -10,4 +10,4 @@ export -f pypi_buildxyz
 
 readarray -t PYPI_PACKAGES < <(jq -rc '.rows | .[] | .project' top-pypi.json)
 mkdir -p "$TMPDIR/job-logs/$JOB"
-parallel --citation --output-as-files --results "$TMPDIR/job-logs/$JOB" --resume-failed --joblog $JOB --progress --bar --delay 2.5 --jobs 25% --tmuxpane pypi_buildxyz ::: "${PYPI_PACKAGES[@]}"
+parallel --output-as-files --results "$TMPDIR/job-logs/$JOB" --resume-failed --joblog $JOB --progress --bar --delay 2.5 --jobs 25% --tmuxpane pypi_buildxyz ::: "${PYPI_PACKAGES[@]}"
