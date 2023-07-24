@@ -28,6 +28,11 @@ fn append_search_path(env: &mut HashMap<String, String>, key: &str, value: PathB
 
 fn append_search_paths(env: &mut HashMap<String, String>,
     root_path: &Path) {
+    // Special hack to ensure that our rustc compiler will always be able to deal
+    // with packages that uses unstable and nightly features as much as possible.
+    // As nixpkgs does not have a nightly compiler.
+    env.entry("RUSTC_BOOTSTRAP".to_string()).and_modify(|e| { *e = "1".to_string(); }).or_insert("1".to_string());
+
     let bin_path = root_path.join("bin");
     let pkgconfig_path = root_path.join("lib").join("pkgconfig");
     let library_path = root_path.join("lib");
