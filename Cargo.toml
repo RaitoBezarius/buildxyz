@@ -12,7 +12,7 @@ log = "0.4.17"
 stderrlog = "0.5.4"
 ctrlc = "3.2.5"
 clap = { version = "4.1.8", features = [ "derive" ] }
-crossbeam-channel = "0.5.7"
+crossbeam-channel = "0.5.8"
 xdg = "2.4.1"
 tui = "0.19.0"
 crossterm = "0.26"
